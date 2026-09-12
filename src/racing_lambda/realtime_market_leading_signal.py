@@ -19,6 +19,7 @@ import numpy as np
 import pandas as pd
 
 from .regularized_pca import RacingRegularizedPCA
+from .rsi_self_learning import RACING_RSI_PERIODS, latest_rsi_state
 
 
 class BetType(str, Enum):
@@ -60,6 +61,9 @@ class MarketSignalResult:
     feature_count: int
     snapshot_count: int
     realtime_ready: bool
+    rsi_self_learning_score: float | None = None
+    combined_score: float | None = None
+    rsi_feature_count: int = 0
 
 
 def _safe_relative_change(first: float, last: float) -> float:
@@ -107,6 +111,10 @@ def extract_market_features(snapshots: Iterable[OddsSnapshot]) -> pd.DataFrame:
             feature_row[f"{prefix}_change"] = change
             feature_row[f"{prefix}_last_step"] = last_step
             feature_row[f"{prefix}_volatility"] = volatility
+            for period in RACING_RSI_PERIODS:
+                state = latest_rsi_state(available, period)
+                for state_name, state_value in state.items():
+                    feature_row[f"rsi_{prefix}_{period}_{state_name}"] = state_value
 
         win_level = feature_row["win_level"]
         for bet_type in ALL_BET_TYPES:
