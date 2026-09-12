@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 import json
 
+import pandas as pd
 import pytest
 
 from racing_lambda import (
@@ -14,6 +15,9 @@ from racing_lambda import (
     ingest_snapshot,
     load_frozen_snapshot,
     odds_snapshots_from_official,
+    OfficialResult,
+    RACING_RSI_FEATURE_VERSION,
+    calculate_support_rsi,
 )
 
 
@@ -60,6 +64,17 @@ def race_history(race_id: str, offset: float = 0.0):
     ]
 
 
+def dense_race_history(race_id: str, winner_bias: int = 1):
+    snapshots = []
+    for minute in range(25):
+        supports = []
+        for horse in range(1, 5):
+            trend = 0.0025 * minute if horse == winner_bias else -0.0005 * minute
+            supports.append((str(horse), 0.08 + horse * 0.02 + trend, 0.12 + horse * 0.02 + trend))
+        snapshots.append(pre_race(race_id, minute, supports))
+    return snapshots
+
+
 def test_names_are_explicit_and_backward_compatible():
     assert FULL_LEADING_PREDICTION_NAME == "本格先行予測λ"
     assert SIMPLE_LEADING_PREDICTION_NAME == "簡易式先行予測λ"
@@ -75,6 +90,7 @@ def test_public_jra_pre_race_snapshots_feed_full_model_features():
     assert frame.shape[0] == 4
     assert "win_change" in frame.columns
     assert "place_vs_win" in frame.columns
+    assert "rsi_win_5_level" in frame.columns
 
 
 def test_full_model_fits_and_scores_sparse_free_jra_ticket_history():
@@ -158,3 +174,45 @@ def test_frozen_jra_snapshot_is_write_once_and_tamper_detected(tmp_path):
     first.write_text(json.dumps(data), encoding="utf-8")
     with pytest.raises(ValueError, match="integrity"):
         load_frozen_snapshot(first)
+
+
+def test_rsi_self_learning_uses_only_prior_results_and_scores_target_race():
+    recent = [dense_race_history("RECENT1", 1), dense_race_history("RECENT2", 2)]
+    prior = [dense_race_history("PRIOR1", 3), dense_race_history("PRIOR2", 4)]
+    results = [
+        OfficialResult(race_id="RECENT1", finishing_order=("1", "2", "3", "4")),
+        OfficialResult(race_id="RECENT2", finishing_order=("2", "1", "3", "4")),
+        OfficialResult(race_id="PRIOR1", finishing_order=("3", "1", "2", "4")),
+        OfficialResult(race_id="PRIOR2", finishing_order=("4", "1", "2", "3")),
+    ]
+    model = FullLeadingPredictionLambda(enabled=True).fit_from_jra_history(
+        recent_races=recent,
+        prior_races=prior,
+        historical_results=results,
+    )
+    assert model.rsi_feature_version == RACING_RSI_FEATURE_VERSION
+    assert model.rsi_learning_summary_.rows == 16
+    scored = model.score_jra_race(dense_race_history("TARGET", 1))
+    assert all(row.rsi_self_learning_score is not None for row in scored)
+    assert all(0.0 <= row.combined_score <= 1.0 for row in scored)
+    assert all(row.rsi_feature_count > 0 for row in scored)
+
+
+def test_rsi_does_not_change_past_values_when_future_support_arrives():
+    support = pd.Series([0.10 + 0.002 * index for index in range(30)])
+    original = calculate_support_rsi(support, 14)
+    extended = calculate_support_rsi(pd.concat([support, pd.Series([0.01])], ignore_index=True), 14)
+    pd.testing.assert_series_equal(original, extended.iloc[:-1], check_names=False)
+
+
+def test_target_result_cannot_be_supplied_to_pre_race_scoring():
+    result = ingest_snapshot(
+        race_id="TARGET",
+        phase="RESULT",
+        source_url="https://www.jra.go.jp/",
+        observed_at=datetime(2026, 9, 9, 4, 0, tzinfo=timezone.utc),
+        payload={"official_result": ["1", "2", "3", "4"]},
+    )
+    model = FullLeadingPredictionLambda(enabled=True)
+    with pytest.raises(ValueError, match="RESULT snapshots cannot enter"):
+        model.score_jra_race([result])
