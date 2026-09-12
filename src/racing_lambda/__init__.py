@@ -56,6 +56,15 @@ from .schema import (
     RaceContext,
 )
 from .scoring import build_prediction
+from .rsi_self_learning import (
+    RACING_RSI_FEATURE_VERSION,
+    RACING_RSI_PERIODS,
+    RacingRsiOutcomeLearner,
+    RsiLearningSummary,
+    build_result_labels,
+    calculate_support_rsi,
+    latest_rsi_state,
+)
 from .simple_leading_signal_v02 import (
     BugType,
     Going,
@@ -99,6 +108,10 @@ __all__ = [
     "PastRun",
     "PredictionRow",
     "RaceContext",
+    "RACING_RSI_FEATURE_VERSION",
+    "RACING_RSI_PERIODS",
+    "RacingRsiOutcomeLearner",
+    "RsiLearningSummary",
     "RaceBacktestRow",
     "RaceDayHorseInput",
     "RacingBacktestReport",
@@ -118,6 +131,8 @@ __all__ = [
     "builtin_backtest_cases_2026_09_06",
     "build_monthly_condition_stats",
     "build_prediction",
+    "build_result_labels",
+    "calculate_support_rsi",
     "build_snapshot_stats",
     "build_statistical_inputs",
     "evaluate_prediction",
@@ -126,6 +141,7 @@ __all__ = [
     "ingest_snapshot",
     "load_frozen_prediction",
     "load_frozen_snapshot",
+    "latest_rsi_state",
     "normalized_market_probabilities",
     "odds_snapshots_from_official",
     "pace_position_score",
