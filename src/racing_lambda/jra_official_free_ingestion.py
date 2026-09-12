@@ -22,6 +22,8 @@ from pathlib import Path
 from typing import Any, Literal, Mapping
 from urllib.parse import urlparse
 
+from racing_maintenance_rsi import DataInspection, RacingExternalDataGuard, validate_jra_payload
+
 Phase = Literal["PRE_RACE", "RESULT"]
 _ALLOWED_HOSTS = {"www.jra.go.jp", "jra.go.jp", "jra.jp", "sp.jra.jp"}
 
@@ -64,6 +66,7 @@ def ingest_snapshot(
     _validate_public_jra_url(source_url)
     if phase not in ("PRE_RACE", "RESULT"):
         raise ValueError("phase must be PRE_RACE or RESULT")
+    validate_jra_payload(payload)
     if phase == "PRE_RACE":
         forbidden = {"official_result", "finish_order", "result", "payout"}
         collision = forbidden.intersection(payload.keys())
@@ -84,6 +87,39 @@ def ingest_snapshot(
     )
 
 
+def ingest_snapshot_file(
+    *,
+    path: str | Path,
+    race_id: str,
+    phase: Phase,
+    source_url: str,
+    observed_at: datetime | None = None,
+    code_commit_sha: str | None = None,
+    require_antivirus: bool = True,
+    guard: RacingExternalDataGuard | None = None,
+) -> tuple[OfficialSnapshot, DataInspection]:
+    """Inspect an external JSON file before creating an immutable snapshot."""
+    source = Path(path)
+    if source.suffix.lower() != ".json":
+        raise ValueError("snapshot ingestion requires a JSON file")
+    inspector = guard or RacingExternalDataGuard()
+    inspection = inspector.inspect(source, require_antivirus=require_antivirus)
+    if not inspection.accepted:
+        raise ValueError(f"maintenance RSI rejected external data: {list(inspection.reasons)}")
+    data = json.loads(source.read_text(encoding="utf-8"))
+    if not isinstance(data, Mapping):
+        raise ValueError("JRA snapshot JSON root must be an object")
+    snapshot = ingest_snapshot(
+        race_id=race_id,
+        phase=phase,
+        source_url=source_url,
+        payload=data,
+        observed_at=observed_at,
+        code_commit_sha=code_commit_sha,
+    )
+    return snapshot, inspection
+
+
 def freeze_snapshot(snapshot: OfficialSnapshot, root: str | Path) -> Path:
     """Write once. Existing snapshots are never overwritten."""
     root = Path(root)
@@ -100,7 +136,12 @@ def freeze_snapshot(snapshot: OfficialSnapshot, root: str | Path) -> Path:
 
 
 def load_frozen_snapshot(path: str | Path) -> OfficialSnapshot:
-    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    source = Path(path)
+    if source.is_symlink() or not source.is_file():
+        raise ValueError("frozen snapshot must be a regular non-symlink file")
+    if source.stat().st_size > 25_000_000:
+        raise ValueError("frozen snapshot exceeds size limit")
+    data = json.loads(source.read_text(encoding="utf-8"))
     snapshot = OfficialSnapshot(**data)
     expected = sha256(_canonical_payload(snapshot.payload)).hexdigest()
     if expected != snapshot.payload_sha256:

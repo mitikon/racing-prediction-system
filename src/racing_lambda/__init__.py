@@ -26,6 +26,7 @@ from .jra_official_free_ingestion import (
     OfficialSnapshot,
     freeze_snapshot,
     ingest_snapshot,
+    ingest_snapshot_file,
     load_frozen_snapshot,
 )
 from .layer2_live_input import (
@@ -139,6 +140,7 @@ __all__ = [
     "freeze_prediction",
     "freeze_snapshot",
     "ingest_snapshot",
+    "ingest_snapshot_file",
     "load_frozen_prediction",
     "load_frozen_snapshot",
     "latest_rsi_state",

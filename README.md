@@ -34,3 +34,11 @@ C_reg = 0.10 * C_recent + 0.90 * C_prior
 ```bash
 python -m pytest -q
 ```
+
+## 保守専用RSI
+
+予測用RSIとは完全に分離した`racing_maintenance_rsi`が、固定PCA比率、PRE_RACEとRESULTの分離、凍結予測の追記禁止、危険なコード、秘密情報、GitHub Actionsを監査します。
+
+JRA由来の外部JSON・CSV・HTMLは、許可形式、容量、実行形式偽装、構文、構造、SHA-256、マルウェア検査を通過したものだけを利用できます。ウイルススキャナー不在時は既定で遮断し、不合格ファイルは隔離できます。
+
+保守専用RSIには、自動投票、予測ロジックの自己変更、`main`への自動マージ、投資側リポジトリへのアクセス権限を与えません。
