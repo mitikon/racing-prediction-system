@@ -5,16 +5,14 @@ on:
     branches: [main]
     paths:
       - "src/racing_lambda/**"
-      - "tests/test_racing*.py"
-      - "tests/test_simple_leading_signal_v02.py"
+      - "tests/**"
       - "pyproject.toml"
       - ".github/workflows/racing-tests.yml"
   pull_request:
     branches: [main]
     paths:
       - "src/racing_lambda/**"
-      - "tests/test_racing*.py"
-      - "tests/test_simple_leading_signal_v02.py"
+      - "tests/**"
       - "pyproject.toml"
       - ".github/workflows/racing-tests.yml"
   workflow_dispatch:
@@ -35,4 +33,4 @@ jobs:
       - name: Install test dependencies
         run: python -m pip install --upgrade pip && python -m pip install '.[test]'
       - name: Run complete racing regression suite
-        run: python -m pytest -q tests/test_racing*.py tests/test_simple_leading_signal_v02.py
+        run: python -m pytest -q tests
