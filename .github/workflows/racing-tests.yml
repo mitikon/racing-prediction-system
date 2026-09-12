@@ -1,6 +1,14 @@
 name: Racing lambda tests
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - "src/racing_lambda/**"
+      - "tests/test_racing*.py"
+      - "tests/test_simple_leading_signal_v02.py"
+      - "pyproject.toml"
+      - ".github/workflows/racing-tests.yml"
   pull_request:
     branches: [main]
     paths:
