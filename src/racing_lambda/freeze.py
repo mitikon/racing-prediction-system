@@ -42,12 +42,19 @@ def freeze_prediction(
     }
     payload["checksum_sha256"] = hashlib.sha256(_canonical(payload).encode()).hexdigest()
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    with path.open("x", encoding="utf-8") as handle:
+        handle.write(json.dumps(payload, ensure_ascii=False, indent=2))
+        handle.write("\n")
     return path
 
 
 def load_frozen_prediction(path: str | Path) -> FrozenPrediction:
-    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    source = Path(path)
+    if source.is_symlink() or not source.is_file():
+        raise ValueError("frozen prediction must be a regular non-symlink file")
+    if source.stat().st_size > 25_000_000:
+        raise ValueError("frozen prediction exceeds size limit")
+    payload = json.loads(source.read_text(encoding="utf-8"))
     checksum = payload.pop("checksum_sha256")
     actual = hashlib.sha256(_canonical(payload).encode()).hexdigest()
     if checksum != actual:
