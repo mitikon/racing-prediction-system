@@ -19,6 +19,12 @@ from typing import Mapping
 import pandas as pd
 
 from .jra_official_free_ingestion import OfficialSnapshot
+from .schema import OfficialResult
+from .rsi_self_learning import (
+    RACING_RSI_FEATURE_VERSION,
+    RacingRsiOutcomeLearner,
+    build_result_labels,
+)
 from .realtime_market_leading_signal import (
     BetType,
     MarketSignalResult,
@@ -125,11 +131,22 @@ class FullLeadingPredictionLambda:
     guarded learning path from free official JRA PRE_RACE observations.
     """
 
-    def __init__(self, *, enabled: bool = False, variance_target: float = 0.90) -> None:
+    def __init__(
+        self,
+        *,
+        enabled: bool = False,
+        variance_target: float = 0.90,
+        rsi_weight: float = 0.25,
+    ) -> None:
+        if not 0.0 <= rsi_weight <= 1.0:
+            raise ValueError("rsi_weight must be between 0 and 1")
         self._core = RealtimeMarketLeadingSignal(
             enabled=enabled,
             variance_target=variance_target,
         )
+        self.rsi_weight = float(rsi_weight)
+        self.rsi_learner = RacingRsiOutcomeLearner()
+        self.rsi_feature_version = RACING_RSI_FEATURE_VERSION
 
     @property
     def enabled(self) -> bool:
@@ -148,6 +165,7 @@ class FullLeadingPredictionLambda:
         *,
         recent_races: Iterable[Sequence[OfficialSnapshot]],
         prior_races: Iterable[Sequence[OfficialSnapshot]],
+        historical_results: Iterable[OfficialResult] | None = None,
     ) -> "FullLeadingPredictionLambda":
         """Learn only from frozen PRE_RACE JRA observations.
 
@@ -158,6 +176,10 @@ class FullLeadingPredictionLambda:
         Public snapshots can legitimately omit ticket types. Features that are
         constant in either training window are removed before PCA so missing
         ticket types do not create zero-variance failures.
+
+        ``historical_results`` supplies labels only for already completed
+        training races. It is kept separate from every PRE_RACE snapshot and
+        can affect only races scored after this fit.
         """
         recent = build_jra_training_frame(recent_races)
         prior = build_jra_training_frame(prior_races)
@@ -176,6 +198,12 @@ class FullLeadingPredictionLambda:
             )
         self.feature_columns_ = tuple(usable_columns)
         self._core.fit(recent.loc[:, usable_columns], prior.loc[:, usable_columns])
+        self.rsi_learning_summary_ = None
+        if historical_results is not None:
+            combined_history = pd.concat([prior, recent], axis=0)
+            labels = build_result_labels(combined_history.index, historical_results)
+            self.rsi_learner.fit(combined_history, labels)
+            self.rsi_learning_summary_ = self.rsi_learner.summary_
         return self
 
     def score_jra_race(
@@ -185,13 +213,18 @@ class FullLeadingPredictionLambda:
         """Score one race using PRE_RACE observations only."""
         if not self.enabled:
             raise RuntimeError("本格先行予測λ is disabled")
+        # Reject same-race RESULT leakage before checking model readiness.
+        rows = odds_snapshots_from_official(snapshots)
         if not hasattr(self, "feature_columns_"):
             raise RuntimeError("fit_from_jra_history must be called before scoring")
-
-        rows = odds_snapshots_from_official(snapshots)
         features = extract_market_features(rows)
         selected = features.reindex(columns=list(self.feature_columns_), fill_value=0.0)
         anomaly = self.model.anomaly_score(selected)
+        rsi_scores = (
+            self.rsi_learner.predict(features)
+            if self.rsi_learning_summary_ is not None
+            else None
+        )
         counts: dict[str, int] = {}
         for row in rows:
             counts[row.horse_id] = counts.get(row.horse_id, 0) + 1
@@ -202,10 +235,28 @@ class FullLeadingPredictionLambda:
                 feature_count=len(self.feature_columns_),
                 snapshot_count=counts[horse_id],
                 realtime_ready=True,
+                rsi_self_learning_score=(
+                    float(rsi_scores.loc[horse_id]) if rsi_scores is not None else None
+                ),
+                combined_score=(
+                    (1.0 - self.rsi_weight) * float(anomaly.loc[horse_id])
+                    + self.rsi_weight * float(rsi_scores.loc[horse_id])
+                    if rsi_scores is not None else float(anomaly.loc[horse_id])
+                ),
+                rsi_feature_count=(
+                    self.rsi_learning_summary_.feature_count
+                    if self.rsi_learning_summary_ is not None else 0
+                ),
             )
             for horse_id in selected.index
         ]
-        return sorted(results, key=lambda result: (-result.anomaly_score, result.horse_id))
+        return sorted(
+            results,
+            key=lambda result: (
+                -float(result.combined_score if result.combined_score is not None else result.anomaly_score),
+                result.horse_id,
+            ),
+        )
 
 
 FULL_LEADING_PREDICTION_NAME = "本格先行予測λ"
