@@ -106,6 +106,9 @@ class SimpleScoreBreakdown:
     corroborating_axes: tuple[str, ...]
     bug_type: BugType
     maximum_bug_eligible: bool
+    realtime_rsi_top3_probability: float | None = None
+    realtime_rsi_bug_score: float | None = None
+    realtime_rsi_used: bool = False
 
 
 @dataclass(frozen=True)
@@ -131,12 +134,20 @@ class SimpleLeadingSignalLambdaV02:
         self,
         context: SimpleRaceContext,
         horses: Sequence[SimpleHorseFeatures],
+        realtime_rsi_signals: Sequence[SimpleRealtimeRsiSignal] | None = None,
     ) -> SimplePredictionOutput:
         if len(horses) < 2:
             raise ValueError("at least two horses are required")
         horse_ids = [horse.horse_id for horse in horses]
         if len(horse_ids) != len(set(horse_ids)):
             raise ValueError("horse_id values must be unique")
+
+        rsi_map = {
+            signal.horse_id: signal for signal in (realtime_rsi_signals or ())
+        }
+        unknown = set(rsi_map) - set(horse_ids)
+        if unknown:
+            raise ValueError(f"realtime RSI contains unknown horse_ids: {sorted(unknown)}")
 
         raw = [self._fundamental_scores(context, horse) for horse in horses]
         fair_probabilities = self._softmax_probabilities(
@@ -148,9 +159,20 @@ class SimpleLeadingSignalLambdaV02:
         for horse, parts, fair_probability in zip(horses, raw, fair_probabilities):
             market_probability = market_probabilities[horse.horse_id]
             value_gap = fair_probability - market_probability
-            odds_signal = self._odds_signal(value_gap, market_probability)
-            axes = self._corroborating_axes(horse, parts, value_gap)
-            maximum_eligible = value_gap > 0 and len(axes) >= 3
+            base_odds_signal = self._odds_signal(value_gap, market_probability)
+            realtime = rsi_map.get(horse.horse_id)
+            odds_signal = (
+                0.40 * base_odds_signal + 0.60 * realtime.bug_score
+                if realtime is not None else base_odds_signal
+            )
+            axes = self._corroborating_axes(
+                horse, parts, value_gap,
+                realtime_bug_score=(realtime.bug_score if realtime is not None else None),
+            )
+            maximum_eligible = len(axes) >= 3 and (
+                value_gap > 0
+                or (realtime is not None and realtime.bug_score >= 0.65)
+            )
             bug_type = self._bug_type(
                 maximum_eligible, fair_probability, parts["race_ability"]
             )
@@ -178,6 +200,13 @@ class SimpleLeadingSignalLambdaV02:
                     corroborating_axes=axes,
                     bug_type=bug_type,
                     maximum_bug_eligible=maximum_eligible,
+                    realtime_rsi_top3_probability=(
+                        round(realtime.top3_probability, 8) if realtime is not None else None
+                    ),
+                    realtime_rsi_bug_score=(
+                        round(realtime.bug_score, 8) if realtime is not None else None
+                    ),
+                    realtime_rsi_used=realtime is not None,
                 )
             )
 
@@ -187,7 +216,12 @@ class SimpleLeadingSignalLambdaV02:
         bug_ranking = tuple(
             sorted(
                 (item for item in scored if item.maximum_bug_eligible),
-                key=lambda item: (-item.value_gap, -item.overall, item.horse_id),
+                key=lambda item: (
+                    -float(item.realtime_rsi_bug_score or 0.0),
+                    -item.value_gap,
+                    -item.overall,
+                    item.horse_id,
+                ),
             )
         )
         return SimplePredictionOutput(
@@ -273,6 +307,7 @@ class SimpleLeadingSignalLambdaV02:
         horse: SimpleHorseFeatures,
         parts: Mapping[str, float],
         value_gap: float,
+        realtime_bug_score: float | None = None,
     ) -> tuple[str, ...]:
         axes: list[str] = []
         if (
@@ -301,6 +336,8 @@ class SimpleLeadingSignalLambdaV02:
             axes.append("斤量・馬体・騎手")
         if value_gap >= 0.012:
             axes.append("最終オッズ売れ不足")
+        if realtime_bug_score is not None and realtime_bug_score >= 0.65:
+            axes.append("3時点全券種オッズ変動")
         return tuple(axes)
 
     @staticmethod
