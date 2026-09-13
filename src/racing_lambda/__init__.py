@@ -84,6 +84,14 @@ from .simple_leading_signal_v02 import (
     SimpleRaceContext,
     SimpleScoreBreakdown,
 )
+from .verification_room import (
+    VerificationEvaluation,
+    VerificationPrediction,
+    VerificationResult,
+    evaluate_verification,
+    freeze_verification_prediction,
+    settle_verification_result,
+)
 from .validation_2026_09_06 import (
     RecordedFrozenPrediction,
     RecordedRaceResult,
@@ -141,6 +149,9 @@ __all__ = [
     "SimpleScoreBreakdown",
     "ThreeRaceValidationReport",
     "VALIDATION_RECORDS_2026_09_06",
+    "VerificationEvaluation",
+    "VerificationPrediction",
+    "VerificationResult",
     "body_weight_fit",
     "build_jra_training_frame",
     "builtin_backtest_cases_2026_09_06",
@@ -153,7 +164,9 @@ __all__ = [
     "build_three_snapshot_training_frame",
     "build_statistical_inputs",
     "evaluate_prediction",
+    "evaluate_verification",
     "freeze_prediction",
+    "freeze_verification_prediction",
     "freeze_snapshot",
     "ingest_snapshot",
     "ingest_snapshot_file",
@@ -166,6 +179,7 @@ __all__ = [
     "rank_odds_distortion",
     "recent_form_score",
     "run_frozen_backtest",
+    "settle_verification_result",
     "validate_record",
     "validation_summary_2026_09_06",
 ]
