@@ -66,6 +66,15 @@ from .rsi_self_learning import (
     calculate_support_rsi,
     latest_rsi_state,
 )
+from .simple_realtime_rsi import (
+    EXPECTED_MINUTES_BEFORE_START,
+    SIMPLE_RSI_THREE_SNAPSHOT_VERSION,
+    SimpleRealtimeRsiSignal,
+    SimpleRsiLearningSummary,
+    SimpleThreeSnapshotRsiLearner,
+    build_three_snapshot_features,
+    build_three_snapshot_training_frame,
+)
 from .simple_leading_signal_v02 import (
     BugType,
     Going,
@@ -119,6 +128,11 @@ __all__ = [
     "RecordedFrozenPrediction",
     "RecordedRaceResult",
     "SIMPLE_LEADING_PREDICTION_NAME",
+    "EXPECTED_MINUTES_BEFORE_START",
+    "SIMPLE_RSI_THREE_SNAPSHOT_VERSION",
+    "SimpleRealtimeRsiSignal",
+    "SimpleRsiLearningSummary",
+    "SimpleThreeSnapshotRsiLearner",
     "SimpleHorseFeatures",
     "SimpleLeadingPredictionLambda",
     "SimpleLeadingSignalLambdaV02",
@@ -135,6 +149,8 @@ __all__ = [
     "build_result_labels",
     "calculate_support_rsi",
     "build_snapshot_stats",
+    "build_three_snapshot_features",
+    "build_three_snapshot_training_frame",
     "build_statistical_inputs",
     "evaluate_prediction",
     "freeze_prediction",
