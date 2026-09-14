@@ -20,7 +20,7 @@ def frozen_history(mode="simple", *, helpful=True):
         for number in range(1, 7):
             placed = number <= 3
             rows.append(RsiBridgeObservation(
-                mode=mode, race_id=f"R{day}", horse_id=str(number),
+                mode=mode, race_id=f"R{day}", horse_id=str(number), field_size=6,
                 rsi_trained_until=start - timedelta(hours=3),
                 frozen_at=start - timedelta(hours=1),
                 scheduled_start=start,
@@ -67,6 +67,10 @@ def test_after_result_predictions_and_future_results_are_rejected():
         AdaptiveRsiBridge("simple").fit(frozen_history()[:42], prediction_at=TARGET)
     with pytest.raises(ValueError, match="one racing mode"):
         AdaptiveRsiBridge("full").fit(frozen_history(), prediction_at=TARGET)
+    rows = frozen_history()
+    rows.pop(0)
+    with pytest.raises(ValueError, match="full unique runner list"):
+        AdaptiveRsiBridge("simple").fit(rows, prediction_at=TARGET)
 
 
 def test_simple_lambda_joins_rsi_only_after_training_and_before_next_start():
