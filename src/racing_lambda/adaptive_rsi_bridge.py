@@ -21,6 +21,7 @@ class RsiBridgeObservation:
     mode: Mode
     race_id: str
     horse_id: str
+    field_size: int
     frozen_at: datetime
     scheduled_start: datetime
     result_known_at: datetime
@@ -34,6 +35,8 @@ class RsiBridgeObservation:
             raise ValueError("mode and race/horse IDs are required")
         if not isinstance(self.top3, bool):
             raise ValueError("top3 label must be a boolean")
+        if not isinstance(self.field_size, int) or self.field_size < 5:
+            raise ValueError("official field_size must be at least five")
         times = (self.rsi_trained_until, self.frozen_at, self.scheduled_start, self.result_known_at)
         if any(time.tzinfo is None or time.utcoffset() is None for time in times):
             raise ValueError("all bridge timestamps must be timezone-aware")
@@ -88,7 +91,9 @@ class AdaptiveRsiBridge:
         if len(races) < self.min_races:
             raise ValueError("insufficient distinct frozen races for RSI bridge")
         for race_id, rows in races.items():
-            if len(rows) < 5 or len({row.horse_id for row in rows}) != len(rows):
+            if (len(rows) != rows[0].field_size or
+                    any(row.field_size != len(rows) for row in rows) or
+                    len({row.horse_id for row in rows}) != len(rows)):
                 raise ValueError(f"{race_id}: a full unique runner list is required")
             if sum(row.top3 for row in rows) != 3:
                 raise ValueError(f"{race_id}: exactly three podium labels are required")
