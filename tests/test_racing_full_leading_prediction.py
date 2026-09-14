@@ -236,7 +236,7 @@ def test_full_lambda_adaptive_rsi_keeps_pca_regularization_and_blocks_old_target
     )
     base = datetime(2026, 8, 1, 12, tzinfo=timezone.utc)
     observations = [RsiBridgeObservation(
-        mode="full", race_id=f"H{day}", horse_id=str(horse),
+        mode="full", race_id=f"H{day}", horse_id=str(horse), field_size=5,
         rsi_trained_until=base + timedelta(days=day, hours=-3),
         frozen_at=base + timedelta(days=day, hours=-1),
         scheduled_start=base + timedelta(days=day),
