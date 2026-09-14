@@ -64,6 +64,7 @@ class MarketSignalResult:
     rsi_self_learning_score: float | None = None
     combined_score: float | None = None
     rsi_feature_count: int = 0
+    adaptive_rsi_weight: float | None = None
 
 
 def _safe_relative_change(first: float, last: float) -> float:

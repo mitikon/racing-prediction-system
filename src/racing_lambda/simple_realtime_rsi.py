@@ -16,7 +16,8 @@ RESULTは学習ラベルにのみ使用し、同一レースのPRE_RACE特徴量
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, Sequence
+from datetime import datetime
+from typing import Iterable, Mapping, Sequence
 
 import numpy as np
 import pandas as pd
@@ -27,6 +28,7 @@ from .realtime_market_leading_signal import (
     OddsSnapshot,
 )
 from .schema import OfficialResult
+from .rsi_self_learning import calculate_support_rsi
 
 
 EXPECTED_MINUTES_BEFORE_START = (30, 15, 5)
@@ -83,6 +85,8 @@ def build_three_snapshot_features(
             prefix = bet_type.value
             feature_row[f"simple_rsi_{prefix}_coverage"] = float(available.mean())
             if int(available.sum()) != 3:
+                # The only Wilder period measurable from three points is 2.
+                feature_row[f"simple_rsi2_{prefix}_level"] = 0.0
                 feature_row[f"simple_rsi_{prefix}_level"] = 0.0
                 feature_row[f"simple_rsi_{prefix}_change_30_to_5"] = 0.0
                 feature_row[f"simple_rsi_{prefix}_change_30_to_15"] = 0.0
@@ -92,6 +96,9 @@ def build_three_snapshot_features(
                 continue
 
             v30, v15, v5 = [float(x) for x in values]
+            feature_row[f"simple_rsi2_{prefix}_level"] = (
+                float(calculate_support_rsi(pd.Series(values), 2).iloc[-1]) / 100.0
+            )
             d1 = _safe_relative_change(v30, v15)
             d2 = _safe_relative_change(v15, v5)
             feature_row[f"simple_rsi_{prefix}_level"] = v5
@@ -176,6 +183,8 @@ class SimpleRealtimeRsiSignal:
     bug_score: float
     feature_count: int
     snapshot_count: int = 3
+    captured_at: datetime | None = None
+    trained_until: datetime | None = None
 
 
 class SimpleThreeSnapshotRsiLearner:
@@ -194,9 +203,27 @@ class SimpleThreeSnapshotRsiLearner:
         self,
         historical_races: Iterable[Sequence[OddsSnapshot]],
         historical_results: Iterable[OfficialResult],
+        *,
+        result_known_at: Mapping[str, datetime] | None = None,
     ) -> "SimpleThreeSnapshotRsiLearner":
-        features = build_three_snapshot_training_frame(historical_races)
-        labels = build_top3_labels(features.index, historical_results)
+        history = [tuple(race) for race in historical_races]
+        results = tuple(historical_results)
+        features = build_three_snapshot_training_frame(history)
+        self.historical_race_ids_ = {race[0].race_id for race in history if race}
+        self.training_results_known_at_ = None
+        if result_known_at is not None:
+            if set(result_known_at) != self.historical_race_ids_ or {
+                result.race_id for result in results
+            } != self.historical_race_ids_:
+                raise ValueError("all simple-mode training races need dated results")
+            for race in history:
+                when = result_known_at[race[0].race_id]
+                if when.tzinfo is None or when.utcoffset() is None or any(
+                    row.captured_at >= when for row in race
+                ):
+                    raise ValueError("simple-mode results must follow PRE_RACE odds")
+            self.training_results_known_at_ = max(result_known_at.values())
+        labels = build_top3_labels(features.index, results)
         aligned = features.replace([np.inf, -np.inf], np.nan)
         valid = labels.notna() & aligned.notna().all(axis=1)
         aligned = aligned.loc[valid]
@@ -231,6 +258,14 @@ class SimpleThreeSnapshotRsiLearner:
     def score(self, snapshots: Sequence[OddsSnapshot]) -> list[SimpleRealtimeRsiSignal]:
         if not hasattr(self, "coefficients_"):
             raise RuntimeError("fit must be called before three-snapshot RSI scoring")
+        if not snapshots:
+            raise ValueError("three PRE_RACE snapshots are required")
+        if snapshots[0].race_id in self.historical_race_ids_:
+            raise ValueError("target race cannot be part of RSI training")
+        captured_at = max(row.captured_at for row in snapshots)
+        if (self.training_results_known_at_ is not None and
+                min(row.captured_at for row in snapshots) <= self.training_results_known_at_):
+            raise ValueError("target must follow dated RSI training results")
         features = build_three_snapshot_features(snapshots)
         selected = features.reindex(columns=list(self.columns_), fill_value=0.0)
         if not np.isfinite(selected.to_numpy(dtype=float)).all():
@@ -253,6 +288,8 @@ class SimpleThreeSnapshotRsiLearner:
                 top3_probability=float(probability[i]),
                 bug_score=float(bug[i]),
                 feature_count=len(self.columns_),
+                captured_at=captured_at if self.training_results_known_at_ is not None else None,
+                trained_until=self.training_results_known_at_,
             )
             for i, horse_id in enumerate(selected.index)
         ]

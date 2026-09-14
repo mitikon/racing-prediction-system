@@ -19,6 +19,7 @@ from typing import Mapping
 import pandas as pd
 
 from .jra_official_free_ingestion import OfficialSnapshot
+from .adaptive_rsi_bridge import AdaptiveRsiBridge, RsiBridgeObservation
 from .schema import OfficialResult
 from .rsi_self_learning import (
     RACING_RSI_FEATURE_VERSION,
@@ -147,6 +148,7 @@ class FullLeadingPredictionLambda:
         self.rsi_weight = float(rsi_weight)
         self.rsi_learner = RacingRsiOutcomeLearner()
         self.rsi_feature_version = RACING_RSI_FEATURE_VERSION
+        self.adaptive_rsi_bridge: AdaptiveRsiBridge | None = None
 
     @property
     def enabled(self) -> bool:
@@ -166,6 +168,7 @@ class FullLeadingPredictionLambda:
         recent_races: Iterable[Sequence[OfficialSnapshot]],
         prior_races: Iterable[Sequence[OfficialSnapshot]],
         historical_results: Iterable[OfficialResult] | None = None,
+        historical_result_known_at: Mapping[str, datetime] | None = None,
     ) -> "FullLeadingPredictionLambda":
         """Learn only from frozen PRE_RACE JRA observations.
 
@@ -181,8 +184,12 @@ class FullLeadingPredictionLambda:
         training races. It is kept separate from every PRE_RACE snapshot and
         can affect only races scored after this fit.
         """
-        recent = build_jra_training_frame(recent_races)
-        prior = build_jra_training_frame(prior_races)
+        if historical_result_known_at is not None and historical_results is None:
+            raise ValueError("historical_result_known_at requires historical_results")
+        recent_history = [tuple(race) for race in recent_races]
+        prior_history = [tuple(race) for race in prior_races]
+        recent = build_jra_training_frame(recent_history)
+        prior = build_jra_training_frame(prior_history)
         if list(recent.columns) != list(prior.columns):
             raise ValueError("recent and prior JRA history must use identical features")
 
@@ -197,24 +204,69 @@ class FullLeadingPredictionLambda:
                 "JRA learning requires at least two non-constant market features"
             )
         self.feature_columns_ = tuple(usable_columns)
+        all_history = recent_history + prior_history
+        self.history_race_ids_ = {race[0].race_id for race in all_history}
+        self.history_last_observed_at_ = max(
+            datetime.fromisoformat(snapshot.observed_at)
+            for race in all_history for snapshot in race
+        )
         self._core.fit(recent.loc[:, usable_columns], prior.loc[:, usable_columns])
+        self.adaptive_rsi_bridge = None
         self.rsi_learning_summary_ = None
+        self.rsi_history_result_known_at_ = None
         if historical_results is not None:
+            historical_results = tuple(historical_results)
+            if historical_result_known_at is not None:
+                if set(historical_result_known_at) != self.history_race_ids_:
+                    raise ValueError("all full-mode training races need result timestamps")
+                if set(result.race_id for result in historical_results) != self.history_race_ids_:
+                    raise ValueError("all full-mode training races need official results")
+                for race in all_history:
+                    when = historical_result_known_at[race[0].race_id]
+                    if when.tzinfo is None or when.utcoffset() is None or any(
+                        datetime.fromisoformat(snapshot.observed_at) >= when for snapshot in race
+                    ):
+                        raise ValueError("full-mode results must follow their PRE_RACE observations")
+                self.rsi_history_result_known_at_ = max(historical_result_known_at.values())
             combined_history = pd.concat([prior, recent], axis=0)
             labels = build_result_labels(combined_history.index, historical_results)
             self.rsi_learner.fit(combined_history, labels)
             self.rsi_learning_summary_ = self.rsi_learner.summary_
         return self
 
+    def fit_rsi_bridge(
+        self, observations: Sequence[RsiBridgeObservation], *, prediction_at: datetime
+    ) -> "FullLeadingPredictionLambda":
+        """Adopt an RSI/λ score mix only if frozen past races beat λ alone."""
+        if getattr(self, "rsi_learning_summary_", None) is None:
+            raise RuntimeError("fit RSI from historical JRA results before calibrating")
+        if self.rsi_history_result_known_at_ is None or self.rsi_history_result_known_at_ >= prediction_at:
+            raise ValueError("adaptive full RSI requires dated completed historical results")
+        candidate = AdaptiveRsiBridge("full").fit(observations, prediction_at=prediction_at)
+        self.adaptive_rsi_bridge = candidate
+        return self
+
     def score_jra_race(
         self,
         snapshots: Sequence[OfficialSnapshot],
+        *,
+        scheduled_start: datetime | None = None,
     ) -> list[MarketSignalResult]:
         """Score one race using PRE_RACE observations only."""
         if not self.enabled:
             raise RuntimeError("本格先行予測λ is disabled")
         # Reject same-race RESULT leakage before checking model readiness.
         rows = odds_snapshots_from_official(snapshots)
+        bridge = self.adaptive_rsi_bridge
+        if bridge is not None:
+            if scheduled_start is None or scheduled_start.tzinfo is None or scheduled_start.utcoffset() is None:
+                raise ValueError("adaptive RSI needs a timezone-aware scheduled_start")
+            if any(row.captured_at >= scheduled_start for row in rows):
+                raise ValueError("adaptive RSI requires only before-start snapshots")
+            if rows[0].race_id in self.history_race_ids_ or min(row.captured_at for row in rows) <= self.history_last_observed_at_:
+                raise ValueError("target must follow the full RSI/PCA training history")
+            if min(row.captured_at for row in rows) <= self.rsi_history_result_known_at_:
+                raise ValueError("target must follow full RSI training results")
         if not hasattr(self, "feature_columns_"):
             raise RuntimeError("fit_from_jra_history must be called before scoring")
         features = extract_market_features(rows)
@@ -239,7 +291,12 @@ class FullLeadingPredictionLambda:
                     float(rsi_scores.loc[horse_id]) if rsi_scores is not None else None
                 ),
                 combined_score=(
-                    (1.0 - self.rsi_weight) * float(anomaly.loc[horse_id])
+                    bridge.blend(
+                        float(anomaly.loc[horse_id]), float(rsi_scores.loc[horse_id]),
+                        captured_at=min(row.captured_at for row in rows),
+                    )
+                    if bridge is not None and rsi_scores is not None
+                    else (1.0 - self.rsi_weight) * float(anomaly.loc[horse_id])
                     + self.rsi_weight * float(rsi_scores.loc[horse_id])
                     if rsi_scores is not None else float(anomaly.loc[horse_id])
                 ),
@@ -247,6 +304,7 @@ class FullLeadingPredictionLambda:
                     self.rsi_learning_summary_.feature_count
                     if self.rsi_learning_summary_ is not None else 0
                 ),
+                adaptive_rsi_weight=(bridge.weight_ if bridge is not None else None),
             )
             for horse_id in selected.index
         ]

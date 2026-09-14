@@ -13,6 +13,7 @@ from .backtest import (
     builtin_backtest_cases_2026_09_06,
     run_frozen_backtest,
 )
+from .adaptive_rsi_bridge import AdaptiveRsiBridge, RsiBridgeObservation, RsiBridgeSummary
 from .evaluation import EvaluationReport, evaluate_prediction
 from .freeze import freeze_prediction, load_frozen_prediction
 from .full_leading_prediction_lambda import (
@@ -106,6 +107,7 @@ from .validation_2026_09_06 import (
 SimpleLeadingPredictionLambda = SimpleLeadingSignalLambdaV02
 
 __all__ = [
+    "AdaptiveRsiBridge",
     "AggregateEvidence",
     "BugType",
     "ComponentWeights",
@@ -127,6 +129,8 @@ __all__ = [
     "PredictionRow",
     "RaceContext",
     "RACING_RSI_FEATURE_VERSION",
+    "RsiBridgeObservation",
+    "RsiBridgeSummary",
     "RACING_RSI_PERIODS",
     "RacingRsiOutcomeLearner",
     "RsiLearningSummary",
