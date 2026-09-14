@@ -1,0 +1,62 @@
+{
+  "races": [
+    {
+      "race_id": "2026-09-13-nakayama-7",
+      "pre_race_source": "競馬予想検証室・中山7R発走前最終回答（13:23頃、単勝オッズ13:13時点）",
+      "official_result_source": "https://sp.jra.jp/JRADB/accessS.html?CNAME=sw01sde1006202604040720260913/E1",
+      "pre_race_order": ["11", "15", "5", "7", "16", "6", "8", "9", "4", "10", "1", "2", "3", "13", "12", "14"],
+      "actual_top3": ["2", "5", "11"],
+      "odds_bug_top_candidate": "11",
+      "notes": {
+        "2": {
+          "pre_race_observation": "近走芝1600mは11・7・8着などで評価を下げた。提供画像13:13の騎手集計には単回収率208%（単数2）・複回収率126%（複数5）の小標本があった",
+          "post_race_observation": "8番人気で1着。小標本回収率を勝因や再現性の証拠とみなすことはできない"
+        }
+      }
+    },
+    {
+      "race_id": "2026-09-13-nakayama-8",
+      "pre_race_source": "競馬予想検証室・中山8R発走前最終回答（単勝オッズ13:38時点）",
+      "official_result_source": "https://sp.jra.jp/JRADB/accessS.html?CNAME=sw01sde1006202604040820260913/96",
+      "pre_race_order": ["16", "14", "1", "10", "3", "13", "5", "2", "6", "11", "15", "4", "7", "9", "8", "12"],
+      "actual_top3": ["3", "13", "10"],
+      "odds_bug_top_candidate": "14",
+      "notes": {
+        "13": {
+          "pre_race_observation": "出馬表では逃げ・先行型で単勝5.0倍の2番人気。近走が1700m中心で1200mへの短縮を慎重に評価し6位とした",
+          "post_race_observation": "重馬場の1200mで道中2番手から2着。短縮への懸念は今回の結果では支持されなかった"
+        }
+      }
+    },
+    {
+      "race_id": "2026-09-13-nakayama-9",
+      "pre_race_source": "競馬予想検証室・習志野特別発走前最終回答（単勝オッズ14:20時点）",
+      "official_result_source": "https://sp.jra.jp/JRADB/accessS.html?CNAME=sw01sde1006202604040920260913/4B",
+      "pre_race_order": ["2", "1", "11", "3", "6", "5", "7", "4", "10", "9", "8"],
+      "actual_top3": ["2", "6", "3"],
+      "odds_bug_top_candidate": "11"
+    },
+    {
+      "race_id": "2026-09-13-nakayama-10",
+      "pre_race_source": "競馬予想検証室・初風ステークス14:32:40固定記録（単勝オッズ14:30時点）",
+      "official_result_source": "https://sp.jra.jp/JRADB/accessS.html?CNAME=sw01sde1006202604041020260913/40",
+      "pre_race_order": ["8", "10", "3", "2", "9", "5", "4", "7", "1", "6"],
+      "actual_top3": ["2", "8", "9"],
+      "odds_bug_top_candidate": "3"
+    },
+    {
+      "race_id": "2026-09-13-hanshin-10",
+      "pre_race_source": "競馬予想検証室・仲秋ステークス14:47直前版固定記録（旧14:38版も改変せず保管）",
+      "official_result_source": "https://sp.jra.jp/JRADB/accessS.html?CNAME=sw01sde1009202604041020260913/1E",
+      "pre_race_order": ["2", "8", "15", "4", "6", "11", "3", "9", "1", "5", "13", "7", "10", "14", "12"],
+      "actual_top3": ["8", "5", "2"],
+      "odds_bug_top_candidate": "15",
+      "notes": {
+        "5": {
+          "pre_race_observation": "出馬表では先行型、単勝23.3倍。直近芝1400mは7・7・8着で、総合10位に据えた。全馬の定量スコア内訳は未保存",
+          "post_race_observation": "芝1600mで最終コーナーを先頭で通過し2着。近走着順と位置取りの配分が原因かどうかは未検証"
+        }
+      }
+    }
+  ]
+}
