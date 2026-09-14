@@ -8,9 +8,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from enum import Enum
 from math import exp
 from typing import Mapping, Sequence
+
+from .adaptive_rsi_bridge import AdaptiveRsiBridge, RsiBridgeObservation
 
 
 class Going(str, Enum):
@@ -35,6 +38,7 @@ class SimpleRaceContext:
     opening_week: bool
     rain: bool
     projected_front_runners: int
+    scheduled_start: datetime | None = None
 
     def __post_init__(self) -> None:
         if not self.race_id.strip():
@@ -109,6 +113,7 @@ class SimpleScoreBreakdown:
     realtime_rsi_top3_probability: float | None = None
     realtime_rsi_bug_score: float | None = None
     realtime_rsi_used: bool = False
+    adaptive_rsi_weight: float | None = None
 
 
 @dataclass(frozen=True)
@@ -130,11 +135,24 @@ class SimpleLeadingSignalLambdaV02:
         "odds_signal": 0.10,
     }
 
+    def __init__(self) -> None:
+        self.adaptive_rsi_bridge: AdaptiveRsiBridge | None = None
+
+    def fit_rsi_bridge(
+        self, observations: Sequence[RsiBridgeObservation], *, prediction_at: datetime
+    ) -> "SimpleLeadingSignalLambdaV02":
+        """Learn the *overall* RSI contribution from dated simple-mode predictions."""
+        candidate = AdaptiveRsiBridge("simple").fit(observations, prediction_at=prediction_at)
+        self.adaptive_rsi_bridge = candidate
+        return self
+
     def rank(
         self,
         context: SimpleRaceContext,
         horses: Sequence[SimpleHorseFeatures],
         realtime_rsi_signals: Sequence[SimpleRealtimeRsiSignal] | None = None,
+        *,
+        captured_at: datetime | None = None,
     ) -> SimplePredictionOutput:
         if len(horses) < 2:
             raise ValueError("at least two horses are required")
@@ -148,6 +166,19 @@ class SimpleLeadingSignalLambdaV02:
         unknown = set(rsi_map) - set(horse_ids)
         if unknown:
             raise ValueError(f"realtime RSI contains unknown horse_ids: {sorted(unknown)}")
+        bridge = self.adaptive_rsi_bridge
+        if bridge is not None:
+            if set(rsi_map) != set(horse_ids):
+                raise ValueError("adaptive RSI requires all runners' three-snapshot signals")
+            if captured_at is None or captured_at.tzinfo is None or captured_at.utcoffset() is None:
+                raise ValueError("adaptive RSI requires timezone-aware captured_at")
+            if (context.scheduled_start is None or context.scheduled_start.tzinfo is None
+                    or context.scheduled_start.utcoffset() is None or captured_at >= context.scheduled_start):
+                raise ValueError("adaptive RSI requires a future scheduled_start")
+            if any(signal.snapshot_count != 3 or signal.captured_at != captured_at or
+                   signal.trained_until is None or signal.trained_until >= captured_at
+                   for signal in rsi_map.values()):
+                raise ValueError("adaptive RSI needs dated, prior-trained three-snapshot signals")
 
         raw = [self._fundamental_scores(context, horse) for horse in horses]
         fair_probabilities = self._softmax_probabilities(
@@ -163,7 +194,7 @@ class SimpleLeadingSignalLambdaV02:
             realtime = rsi_map.get(horse.horse_id)
             odds_signal = (
                 0.40 * base_odds_signal + 0.60 * realtime.bug_score
-                if realtime is not None else base_odds_signal
+                if realtime is not None and bridge is None else base_odds_signal
             )
             axes = self._corroborating_axes(
                 horse, parts, value_gap,
@@ -184,6 +215,8 @@ class SimpleLeadingSignalLambdaV02:
                 * parts["physical_condition"]
                 + self.WEIGHTS["odds_signal"] * odds_signal
             )
+            if bridge is not None and realtime is not None and captured_at is not None:
+                overall = bridge.blend(overall, realtime.top3_probability, captured_at=captured_at)
             scored.append(
                 SimpleScoreBreakdown(
                     horse_id=horse.horse_id,
@@ -207,6 +240,7 @@ class SimpleLeadingSignalLambdaV02:
                         round(realtime.bug_score, 8) if realtime is not None else None
                     ),
                     realtime_rsi_used=realtime is not None,
+                    adaptive_rsi_weight=(bridge.weight_ if bridge is not None else None),
                 )
             )
 

@@ -1,4 +1,7 @@
 from datetime import datetime, timedelta, timezone
+from dataclasses import replace
+
+import pytest
 
 from racing_lambda.realtime_market_leading_signal import BetType, OddsSnapshot
 from racing_lambda.schema import OfficialResult
@@ -67,6 +70,8 @@ def test_three_snapshot_features_require_exactly_three_points_per_horse():
     features = build_three_snapshot_features(rows)
     assert set(features.index) == {"1", "2", "3", "4"}
     assert "simple_rsi_win_change_30_to_5" in features.columns
+    assert "simple_rsi2_win_level" in features.columns
+    assert 0.0 <= features.loc["1", "simple_rsi2_win_level"] <= 1.0
     assert "simple_rsi_trifecta_acceleration" in features.columns
     assert "simple_rsi_cross_ticket_change_std" in features.columns
 
@@ -115,3 +120,23 @@ def test_simple_lambda_accepts_three_snapshot_rsi_as_optional_market_layer():
     one = next(row for row in enriched.lambda_overall_final if row.horse_id == "1")
     assert one.realtime_rsi_bug_score == 0.91
     assert "3時点全券種オッズ変動" in one.corroborating_axes
+
+
+def test_dated_simple_rsi_training_flows_directly_to_lambda_without_future_result():
+    races = [_race_snapshots(f"R{i}", 0.003 * i) for i in range(3)]
+    results = [OfficialResult(f"R{i}", ("1", "2", "3", "4")) for i in range(3)]
+    known_at = datetime(2026, 9, 13, 6, tzinfo=timezone.utc)
+    learner = SimpleThreeSnapshotRsiLearner().fit(
+        races, results,
+        result_known_at={f"R{i}": known_at for i in range(3)},
+    )
+    tomorrow = [replace(row, race_id="TARGET",
+                        captured_at=row.captured_at + timedelta(days=1))
+                for row in _race_snapshots("TARGET")]
+    signals = learner.score(tomorrow)
+    assert all(row.trained_until == known_at and row.snapshot_count == 3
+               for row in signals)
+    with pytest.raises(ValueError, match="dated RSI training results"):
+        learner.score(_race_snapshots("TARGET"))
+    with pytest.raises(ValueError, match="target race"):
+        learner.score(_race_snapshots("R0"))

@@ -216,3 +216,49 @@ def test_target_result_cannot_be_supplied_to_pre_race_scoring():
     model = FullLeadingPredictionLambda(enabled=True)
     with pytest.raises(ValueError, match="RESULT snapshots cannot enter"):
         model.score_jra_race([result])
+
+
+def test_full_lambda_adaptive_rsi_keeps_pca_regularization_and_blocks_old_target():
+    from datetime import timedelta
+    from racing_lambda.adaptive_rsi_bridge import RsiBridgeObservation
+    from racing_lambda.regularized_pca import (
+        RECENT_CORRELATION_WEIGHT, PRIOR_CORRELATION_WEIGHT,
+    )
+
+    prior = [dense_race_history("PRIOR1", 1), dense_race_history("PRIOR2", 2)]
+    recent = [dense_race_history("RECENT1", 3), dense_race_history("RECENT2", 4)]
+    results = [OfficialResult(race_id=name, finishing_order=("1", "2", "3", "4"))
+               for name in ("PRIOR1", "PRIOR2", "RECENT1", "RECENT2")]
+    model = FullLeadingPredictionLambda(enabled=True).fit_from_jra_history(
+        recent_races=recent, prior_races=prior, historical_results=results,
+        historical_result_known_at={name: datetime(2026, 9, 9, 4, tzinfo=timezone.utc)
+                                    for name in ("PRIOR1", "PRIOR2", "RECENT1", "RECENT2")},
+    )
+    base = datetime(2026, 8, 1, 12, tzinfo=timezone.utc)
+    observations = [RsiBridgeObservation(
+        mode="full", race_id=f"H{day}", horse_id=str(horse),
+        rsi_trained_until=base + timedelta(days=day, hours=-3),
+        frozen_at=base + timedelta(days=day, hours=-1),
+        scheduled_start=base + timedelta(days=day),
+        result_known_at=base + timedelta(days=day, hours=1),
+        lambda_score=0.47 if horse <= 3 else 0.53,
+        rsi_score=0.90 if horse <= 3 else 0.10,
+        top3=horse <= 3,
+    ) for day in range(8) for horse in range(1, 6)]
+    model.fit_rsi_bridge(observations,
+                         prediction_at=datetime(2026, 9, 9, 5, tzinfo=timezone.utc))
+    assert model.adaptive_rsi_bridge.weight_ > 0
+    target = [ingest_snapshot(
+        race_id="TARGET", phase="PRE_RACE", source_url=row.source_url,
+        observed_at=datetime.fromisoformat(row.observed_at) + timedelta(days=1),
+        payload=row.payload,
+    ) for row in dense_race_history("TARGET", 1)]
+    scored = model.score_jra_race(
+        target, scheduled_start=datetime(2026, 9, 10, 4, tzinfo=timezone.utc)
+    )
+    assert all(row.adaptive_rsi_weight == model.adaptive_rsi_bridge.weight_ for row in scored)
+    assert RECENT_CORRELATION_WEIGHT == 0.10
+    assert PRIOR_CORRELATION_WEIGHT == 0.90
+    with pytest.raises(ValueError, match="training history"):
+        model.score_jra_race(dense_race_history("TARGET", 1),
+                             scheduled_start=datetime(2026, 9, 9, 4, tzinfo=timezone.utc))
