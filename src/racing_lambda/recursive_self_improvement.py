@@ -1,0 +1,385 @@
+"""Controlled Recursive Self-Improvement for both racing prediction modes.
+
+This RSI is not Relative Strength Index.  Each full/simple candidate is sealed
+before a future race prediction, evaluated only after the official result, and
+can emit only a human-review promotion proposal.
+"""
+
+from __future__ import annotations
+
+from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
+from hashlib import sha256
+import json
+from math import isfinite
+from pathlib import Path
+from statistics import mean
+from typing import Literal, Mapping, Sequence
+
+
+Mode = Literal["full", "simple"]
+RECURSIVE_SELF_IMPROVEMENT_VERSION = "racing-recursive-self-improvement-v1"
+FIXED_RECENT_CORRELATION_WEIGHT = 0.10
+FIXED_PRIOR_CORRELATION_WEIGHT = 0.90
+ALLOWED_PARAMETERS: Mapping[str, frozenset[str]] = {
+    "full": frozenset({"rsi_periods", "rsi_feature_set", "rsi_weight", "market_feature_set"}),
+    "simple": frozenset({"short_rsi_period", "rsi_feature_set", "rsi_weight", "odds_snapshot_minutes"}),
+}
+
+
+def _utc(value: datetime, name: str) -> datetime:
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError(f"{name} must be timezone-aware")
+    return value.astimezone(timezone.utc)
+
+
+def _digest(value: str, name: str) -> str:
+    normalized = value.lower()
+    if len(normalized) != 64 or any(char not in "0123456789abcdef" for char in normalized):
+        raise ValueError(f"{name} must be a 64-character SHA-256")
+    return normalized
+
+
+def _canonical(payload: object) -> bytes:
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+
+def parameter_manifest_digest(parameters: Mapping[str, object]) -> str:
+    return sha256(_canonical(dict(parameters))).hexdigest()
+
+
+@dataclass(frozen=True)
+class RacingRsiCandidate:
+    mode: Mode
+    candidate_id: str
+    parent_version: str
+    generation: int
+    created_at: datetime
+    source_commit: str
+    parameter_manifest_sha256: str
+    parameters: Mapping[str, object]
+    parent_report_sha256: str | None = None
+    recent_correlation_weight: float = FIXED_RECENT_CORRELATION_WEIGHT
+    prior_correlation_weight: float = FIXED_PRIOR_CORRELATION_WEIGHT
+
+    def __post_init__(self) -> None:
+        if self.mode not in ("full", "simple"):
+            raise ValueError("mode must be full or simple")
+        if not self.candidate_id.strip() or not self.parent_version.strip():
+            raise ValueError("candidate_id and parent_version are required")
+        if self.generation < 1:
+            raise ValueError("generation must be positive")
+        _utc(self.created_at, "created_at")
+        _digest(self.parameter_manifest_sha256, "parameter_manifest_sha256")
+        if self.parent_report_sha256 is not None:
+            _digest(self.parent_report_sha256, "parent_report_sha256")
+        if (self.generation == 1) != (self.parent_report_sha256 is None):
+            raise ValueError("generation 1 has no parent report; later generations require one")
+        if len(self.source_commit) != 40 or any(char not in "0123456789abcdef" for char in self.source_commit.lower()):
+            raise ValueError("source_commit must be a full Git commit SHA")
+        unknown = set(self.parameters) - ALLOWED_PARAMETERS[self.mode]
+        if unknown:
+            raise ValueError(f"candidate attempts non-allow-listed changes: {sorted(unknown)}")
+        if not self.parameters:
+            raise ValueError("candidate must change at least one allow-listed parameter")
+        if self.parameter_manifest_sha256 != parameter_manifest_digest(self.parameters):
+            raise ValueError("parameter_manifest_sha256 does not match candidate parameters")
+        if (
+            self.recent_correlation_weight != FIXED_RECENT_CORRELATION_WEIGHT
+            or self.prior_correlation_weight != FIXED_PRIOR_CORRELATION_WEIGHT
+        ):
+            raise ValueError("fixed racing PCA correlation weights cannot be changed")
+
+    def sealed_payload(self) -> dict[str, object]:
+        return {
+            **asdict(self),
+            "created_at": _utc(self.created_at, "created_at").isoformat(),
+            "parameters": dict(self.parameters),
+        }
+
+
+def candidate_manifest_digest(candidate: RacingRsiCandidate) -> str:
+    return sha256(_canonical(candidate.sealed_payload())).hexdigest()
+
+
+@dataclass(frozen=True)
+class RacingFrozenTrial:
+    """Pre-race attestation for one mode-specific candidate comparison."""
+
+    mode: Mode
+    candidate_id: str
+    race_id: str
+    registered_at: datetime
+    prediction_frozen_at: datetime
+    scheduled_start: datetime
+    baseline_prediction_sha256: str
+    candidate_prediction_sha256: str
+    candidate_manifest_sha256: str
+    input_sha256: str
+
+    def __post_init__(self) -> None:
+        if self.mode not in ("full", "simple") or not self.race_id.strip():
+            raise ValueError("valid mode and race_id are required")
+        registered = _utc(self.registered_at, "registered_at")
+        frozen = _utc(self.prediction_frozen_at, "prediction_frozen_at")
+        start = _utc(self.scheduled_start, "scheduled_start")
+        if not registered <= frozen < start:
+            raise ValueError("trial registration and prediction freeze must precede race start")
+        _digest(self.baseline_prediction_sha256, "baseline_prediction_sha256")
+        _digest(self.candidate_prediction_sha256, "candidate_prediction_sha256")
+        _digest(self.candidate_manifest_sha256, "candidate_manifest_sha256")
+        _digest(self.input_sha256, "input_sha256")
+
+    def sealed_payload(self) -> dict[str, object]:
+        return {
+            **asdict(self),
+            "registered_at": _utc(self.registered_at, "registered_at").isoformat(),
+            "prediction_frozen_at": _utc(self.prediction_frozen_at, "prediction_frozen_at").isoformat(),
+            "scheduled_start": _utc(self.scheduled_start, "scheduled_start").isoformat(),
+        }
+
+
+def trial_manifest_digest(trial: RacingFrozenTrial) -> str:
+    return sha256(_canonical(trial.sealed_payload())).hexdigest()
+
+
+@dataclass(frozen=True)
+class RacingFutureEvaluation:
+    mode: Mode
+    candidate_id: str
+    race_id: str
+    prediction_frozen_at: datetime
+    scheduled_start: datetime
+    result_known_at: datetime
+    baseline_prediction_sha256: str
+    candidate_prediction_sha256: str
+    candidate_manifest_sha256: str
+    trial_manifest_sha256: str
+    baseline_brier_loss: float
+    candidate_brier_loss: float
+    baseline_top3_hits: int
+    candidate_top3_hits: int
+    baseline_recovery_rate: float
+    candidate_recovery_rate: float
+    baseline_max_bug_hit: bool
+    candidate_max_bug_hit: bool
+
+    def __post_init__(self) -> None:
+        if self.mode not in ("full", "simple") or not self.race_id.strip():
+            raise ValueError("valid mode and race_id are required")
+        frozen = _utc(self.prediction_frozen_at, "prediction_frozen_at")
+        start = _utc(self.scheduled_start, "scheduled_start")
+        result = _utc(self.result_known_at, "result_known_at")
+        if not frozen < start <= result:
+            raise ValueError("prediction must be frozen before start and official result")
+        _digest(self.baseline_prediction_sha256, "baseline_prediction_sha256")
+        _digest(self.candidate_prediction_sha256, "candidate_prediction_sha256")
+        _digest(self.candidate_manifest_sha256, "candidate_manifest_sha256")
+        _digest(self.trial_manifest_sha256, "trial_manifest_sha256")
+        numeric = (
+            self.baseline_brier_loss,
+            self.candidate_brier_loss,
+            self.baseline_recovery_rate,
+            self.candidate_recovery_rate,
+        )
+        if any(not isinstance(value, (int, float)) or not isfinite(float(value)) for value in numeric):
+            raise ValueError("evaluation metrics must be finite numbers")
+        if self.baseline_brier_loss < 0 or self.candidate_brier_loss < 0:
+            raise ValueError("Brier loss cannot be negative")
+        if self.baseline_recovery_rate < 0 or self.candidate_recovery_rate < 0:
+            raise ValueError("recovery rate cannot be negative")
+        if not 0 <= self.baseline_top3_hits <= 3 or not 0 <= self.candidate_top3_hits <= 3:
+            raise ValueError("top3_hits must be between zero and three")
+
+
+@dataclass(frozen=True)
+class RacingPromotionReport:
+    status: str
+    mode: Mode
+    candidate_id: str
+    generation: int
+    evaluated_races: int
+    baseline_mean_brier_loss: float
+    candidate_mean_brier_loss: float
+    loss_improvement: float
+    baseline_top3_hits: int
+    candidate_top3_hits: int
+    baseline_mean_recovery_rate: float
+    candidate_mean_recovery_rate: float
+    baseline_max_bug_hits: int
+    candidate_max_bug_hits: int
+    gates: Mapping[str, bool]
+    report_sha256: str
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            **asdict(self),
+            "gates": dict(self.gates),
+            "autonomous_source_edits": False,
+            "autonomous_main_merge": False,
+            "betting_authority": False,
+            "investment_system_access": False,
+            "human_approval_required": True,
+        }
+
+
+class RacingRecursiveImprovementGate:
+    """Keep full/simple generations separate and test only genuinely future races."""
+
+    def __init__(self, mode: Mode, *, min_future_races: int = 8, min_loss_improvement: float = 0.001) -> None:
+        if mode not in ("full", "simple") or min_future_races < 8 or min_loss_improvement < 0:
+            raise ValueError("unsafe racing recursive-improvement gate configuration")
+        self.mode = mode
+        self.min_future_races = int(min_future_races)
+        self.min_loss_improvement = float(min_loss_improvement)
+
+    def evaluate(
+        self,
+        candidate: RacingRsiCandidate,
+        observations: Sequence[RacingFutureEvaluation],
+        trials: Sequence[RacingFrozenTrial],
+    ) -> RacingPromotionReport:
+        if candidate.mode != self.mode:
+            raise ValueError("candidate belongs to another racing mode")
+        rows = sorted(observations, key=lambda item: item.scheduled_start)
+        if len(rows) < self.min_future_races:
+            raise ValueError("insufficient future races for recursive RSI evaluation")
+        if len({row.race_id for row in rows}) != len(rows):
+            raise ValueError("duplicate evaluation races are prohibited")
+        trials_by_race = {trial.race_id: trial for trial in trials}
+        if len(trials_by_race) != len(trials) or set(trials_by_race) != {row.race_id for row in rows}:
+            raise ValueError("each evaluation requires exactly one pre-race frozen trial")
+        created = _utc(candidate.created_at, "created_at")
+        sealed_candidate_hash = candidate_manifest_digest(candidate)
+        for row in rows:
+            trial = trials_by_race[row.race_id]
+            if row.mode != self.mode or row.candidate_id != candidate.candidate_id:
+                raise ValueError("full/simple or candidate evaluation mixing is prohibited")
+            if trial.mode != self.mode or trial.candidate_id != candidate.candidate_id:
+                raise ValueError("full/simple or candidate trial mixing is prohibited")
+            if _utc(trial.registered_at, "registered_at") <= created:
+                raise ValueError("candidate must be sealed before every registered trial")
+            if (
+                _utc(row.prediction_frozen_at, "prediction_frozen_at")
+                != _utc(trial.prediction_frozen_at, "trial prediction_frozen_at")
+                or _utc(row.scheduled_start, "scheduled_start")
+                != _utc(trial.scheduled_start, "trial scheduled_start")
+            ):
+                raise ValueError("evaluation timing does not match frozen trial")
+            if _utc(row.prediction_frozen_at, "prediction_frozen_at") <= created:
+                raise ValueError("candidate must be sealed before every evaluated prediction")
+            if row.candidate_manifest_sha256 != sealed_candidate_hash:
+                raise ValueError("evaluation is not bound to the sealed candidate manifest")
+            if trial.candidate_manifest_sha256 != sealed_candidate_hash:
+                raise ValueError("trial is not bound to the sealed candidate manifest")
+            if (
+                row.baseline_prediction_sha256 != trial.baseline_prediction_sha256
+                or row.candidate_prediction_sha256 != trial.candidate_prediction_sha256
+                or row.trial_manifest_sha256 != trial_manifest_digest(trial)
+            ):
+                raise ValueError("settled evaluation does not match pre-race frozen trial")
+
+        baseline_loss = mean(row.baseline_brier_loss for row in rows)
+        candidate_loss = mean(row.candidate_brier_loss for row in rows)
+        baseline_top3 = sum(row.baseline_top3_hits for row in rows)
+        candidate_top3 = sum(row.candidate_top3_hits for row in rows)
+        baseline_recovery = mean(row.baseline_recovery_rate for row in rows)
+        candidate_recovery = mean(row.candidate_recovery_rate for row in rows)
+        baseline_bug = sum(row.baseline_max_bug_hit for row in rows)
+        candidate_bug = sum(row.candidate_max_bug_hit for row in rows)
+        improvement = baseline_loss - candidate_loss
+        gates = {
+            "sealed_before_future_predictions": True,
+            "pre_race_trial_attested": True,
+            "minimum_future_races": True,
+            "brier_loss_improved": improvement >= self.min_loss_improvement,
+            "top3_extraction_not_worse": candidate_top3 >= baseline_top3,
+            "recovery_rate_not_worse": candidate_recovery >= baseline_recovery,
+            "maximum_bug_detection_not_worse": candidate_bug >= baseline_bug,
+            "fixed_core_invariants": True,
+            "mode_isolated": True,
+        }
+        status = "PROMOTION_PROPOSED" if all(gates.values()) else "REJECTED"
+        unsigned = {
+            "version": RECURSIVE_SELF_IMPROVEMENT_VERSION,
+            "status": status,
+            "mode": self.mode,
+            "candidate_id": candidate.candidate_id,
+            "generation": candidate.generation,
+            "evaluated_races": len(rows),
+            "baseline_mean_brier_loss": baseline_loss,
+            "candidate_mean_brier_loss": candidate_loss,
+            "loss_improvement": improvement,
+            "baseline_top3_hits": baseline_top3,
+            "candidate_top3_hits": candidate_top3,
+            "baseline_mean_recovery_rate": baseline_recovery,
+            "candidate_mean_recovery_rate": candidate_recovery,
+            "baseline_max_bug_hits": baseline_bug,
+            "candidate_max_bug_hits": candidate_bug,
+            "gates": gates,
+            "candidate_manifest_sha256": sealed_candidate_hash,
+        }
+        report_hash = sha256(_canonical(unsigned)).hexdigest()
+        return RacingPromotionReport(
+            status=status,
+            mode=self.mode,
+            candidate_id=candidate.candidate_id,
+            generation=candidate.generation,
+            evaluated_races=len(rows),
+            baseline_mean_brier_loss=baseline_loss,
+            candidate_mean_brier_loss=candidate_loss,
+            loss_improvement=improvement,
+            baseline_top3_hits=baseline_top3,
+            candidate_top3_hits=candidate_top3,
+            baseline_mean_recovery_rate=baseline_recovery,
+            candidate_mean_recovery_rate=candidate_recovery,
+            baseline_max_bug_hits=baseline_bug,
+            candidate_max_bug_hits=candidate_bug,
+            gates=gates,
+            report_sha256=report_hash,
+        )
+
+
+def validate_successor(previous: RacingPromotionReport, candidate: RacingRsiCandidate) -> None:
+    if previous.status != "PROMOTION_PROPOSED":
+        raise ValueError("a rejected generation cannot become the recursive parent")
+    if candidate.mode != previous.mode:
+        raise ValueError("full and simple recursive generations cannot be mixed")
+    if candidate.generation != previous.generation + 1:
+        raise ValueError("recursive candidate generation is not sequential")
+    if candidate.parent_version != previous.candidate_id:
+        raise ValueError("recursive candidate parent_version mismatch")
+    if candidate.parent_report_sha256 != previous.report_sha256:
+        raise ValueError("recursive candidate is not chained to the prior report")
+
+
+def freeze_candidate(candidate: RacingRsiCandidate, path: str | Path) -> Path:
+    destination = Path(path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    payload = candidate.sealed_payload()
+    payload["candidate_manifest_sha256"] = candidate_manifest_digest(candidate)
+    with destination.open("x", encoding="utf-8") as handle:
+        json.dump(payload, handle, ensure_ascii=False, sort_keys=True, indent=2)
+        handle.write("\n")
+    return destination
+
+
+def freeze_trial(trial: RacingFrozenTrial, path: str | Path) -> Path:
+    """Write the comparison trial once, before the official race result exists."""
+    destination = Path(path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    payload = trial.sealed_payload()
+    payload["trial_manifest_sha256"] = trial_manifest_digest(trial)
+    with destination.open("x", encoding="utf-8") as handle:
+        json.dump(payload, handle, ensure_ascii=False, sort_keys=True, indent=2)
+        handle.write("\n")
+    return destination
+
+
+def freeze_promotion_report(report: RacingPromotionReport, path: str | Path) -> Path:
+    destination = Path(path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with destination.open("x", encoding="utf-8") as handle:
+        json.dump(report.to_dict(), handle, ensure_ascii=False, sort_keys=True, indent=2)
+        handle.write("\n")
+    return destination

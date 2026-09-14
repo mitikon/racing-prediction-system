@@ -82,3 +82,9 @@ ChatGPTがこのチャットで予想を行い、ユーザーが正式結果を�
 - 簡易式: `SimpleThreeSnapshotRsiLearner.fit(..., result_known_at=...)` に発走30/15/5分前相当のオッズと過去の結果時刻を与え、`score(target_snapshots)` から時刻を付けた全馬シグナルを取得します。`SimpleLeadingPredictionLambda().fit_rsi_bridge(simple_records, prediction_at=...).rank(context, horses, signals, captured_at=...)` が競走データλとRSIを総合順位で直接結合します。`context.scheduled_start` は必須です。従来の市場バグ評価は別欄に残します。
 
 簡易式の3時点では期間14のWilder RSIは算出できません。算出可能な**期間2の短期RSI**を別特徴量として加え、既存の3時点変化・加速度と分けます。現在の9月13日の検証画像は単一時点オッズと手動順位だけのため、上記の学習条件を満たさず係数更新は実施していません。データ取得と永続化は別途必要で、コードは未検証の精度向上を約束しません。施行後の仮想予想は学習入力に使用できません。
+
+## RSI再帰的自己改善（Recursive Self-Improvement）
+
+相対力指数RSIとは別に、`RacingRecursiveImprovementGate("full")`と`RacingRecursiveImprovementGate("simple")`が本格型・簡易式を独立して世代管理します。候補設定、親世代、Gitコミットを凍結し、入力、現行予測、候補予測、候補マニフェストを発走前の試行記録へ書き込み禁止形式で固定します。後日判明した正式結果だけで評価し、試行記録とのハッシュ不一致は評価対象にできません。
+
+各モード8レース以上についてBrier損失、上位3頭抽出、回収率、最大バグ検知の全条件が現行版以上の場合だけ`PROMOTION_PROPOSED`を生成します。合格案も人間承認用のPR候補に留まり、ソース変更、`main`マージ、賭けは自動実行しません。本格型の固定PCA比`0.10×直近 + 0.90×事前`は改善対象外で、本格型と簡易式の学習記録も混合できません。
