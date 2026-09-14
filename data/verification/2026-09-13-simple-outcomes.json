@@ -6,7 +6,13 @@
       "official_result_source": "https://sp.jra.jp/JRADB/accessS.html?CNAME=sw01sde1006202604040720260913/E1",
       "pre_race_order": ["11", "15", "5", "7", "16", "6", "8", "9", "4", "10", "1", "2", "3", "13", "12", "14"],
       "actual_top3": ["2", "5", "11"],
-      "odds_bug_top_candidate": "11"
+      "odds_bug_top_candidate": "11",
+      "notes": {
+        "2": {
+          "pre_race_observation": "近走芝1600mは11・7・8着などで評価を下げた。提供画像13:13の騎手集計には単回収率208%（単数2）・複回収率126%（複数5）の小標本があった",
+          "post_race_observation": "8番人気で1着。小標本回収率を勝因や再現性の証拠とみなすことはできない"
+        }
+      }
     },
     {
       "race_id": "2026-09-13-nakayama-8",
@@ -17,7 +23,7 @@
       "odds_bug_top_candidate": "14",
       "notes": {
         "13": {
-          "pre_race_observation": "近走が1700m中心で1200mへの短縮を慎重に評価し6位とした",
+          "pre_race_observation": "出馬表では逃げ・先行型で単勝5.0倍の2番人気。近走が1700m中心で1200mへの短縮を慎重に評価し6位とした",
           "post_race_observation": "重馬場の1200mで道中2番手から2着。短縮への懸念は今回の結果では支持されなかった"
         }
       }
@@ -47,7 +53,8 @@
       "odds_bug_top_candidate": "15",
       "notes": {
         "5": {
-          "post_race_observation": "最終コーナーを先頭で通過し2着。発走前の全馬定量入力が残らず、10位評価の原因は未確定"
+          "pre_race_observation": "出馬表では先行型、単勝23.3倍。直近芝1400mは7・7・8着で、総合10位に据えた。全馬の定量スコア内訳は未保存",
+          "post_race_observation": "芝1600mで最終コーナーを先頭で通過し2着。近走着順と位置取りの配分が原因かどうかは未検証"
         }
       }
     }
