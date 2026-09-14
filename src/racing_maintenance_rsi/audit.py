@@ -55,6 +55,7 @@ class AuditReport:
             "autonomous_main_merge": False,
             "betting_authority": False,
             "investment_system_access": False,
+            "recursive_rsi_autonomous_promotion": False,
         }
 
 
@@ -102,6 +103,7 @@ def _check_core(root: Path) -> list[AuditFinding]:
         root / "src/racing_lambda/rsi_self_learning.py",
         root / "src/racing_lambda/jra_official_free_ingestion.py",
         root / "src/racing_lambda/freeze.py",
+        root / "src/racing_lambda/recursive_self_improvement.py",
     )
     for path in required:
         if not path.is_file():
@@ -125,6 +127,15 @@ def _check_core(root: Path) -> list[AuditFinding]:
         findings.append(AuditFinding("SNAPSHOT_WRITE_WEAKENED", Severity.CRITICAL, "snapshot freeze must use exclusive creation", str(required[3])))
     if 'phase != "PRE_RACE"' not in required[1].read_text(encoding="utf-8"):
         findings.append(AuditFinding("RESULT_GATE_MISSING", Severity.CRITICAL, "RESULT snapshots must be rejected from prediction input", str(required[1])))
+    recursive_text = required[5].read_text(encoding="utf-8")
+    for required_guard in (
+        '"autonomous_source_edits": False',
+        '"autonomous_main_merge": False',
+        '"betting_authority": False',
+        '"human_approval_required": True',
+    ):
+        if required_guard not in recursive_text:
+            findings.append(AuditFinding("RECURSIVE_RSI_GUARD_REMOVED", Severity.CRITICAL, f"required recursive RSI guard is missing: {required_guard}", str(required[5])))
     return findings
 
 
@@ -196,6 +207,7 @@ def audit_repository(root: str | Path) -> AuditReport:
             "high_confidence_secret_scan",
             "workflow_least_privilege",
             "action_sha_pinning",
+            "recursive_rsi_human_promotion_gate",
         ),
     )
 
