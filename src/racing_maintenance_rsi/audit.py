@@ -62,10 +62,13 @@ class AuditReport:
 _PINNED_ACTION = re.compile(
     r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*@[0-9a-f]{40}(?:\s*#.*)?$"
 )
-_BANNED_SOURCE_PATTERNS = {
-    "pickle.load(": "untrusted pickle deserialization is prohibited",
-    "yaml.load(": "unsafe YAML loading is prohibited",
-    "shell=True": "shell=True is prohibited",
+_BANNED_QUALIFIED_CALLS = {
+    ("pickle", "load"): "untrusted pickle deserialization is prohibited",
+    ("pickle", "loads"): "untrusted pickle deserialization is prohibited",
+    ("yaml", "load"): "unsafe YAML loading is prohibited",
+    ("yaml", "unsafe_load"): "unsafe YAML loading is prohibited",
+    ("yaml", "full_load"): "unsafe YAML loading is prohibited",
+    ("marshal", "loads"): "untrusted marshal deserialization is prohibited",
 }
 _SECRET_PATTERNS = {
     "AWS_ACCESS_KEY": re.compile(r"AKIA[0-9A-Z]{16}"),
@@ -152,21 +155,43 @@ def _source_candidates(root: Path) -> list[Path]:
     )
 
 
+def _dangerous_call_findings(tree: ast.AST, path: Path) -> list[AuditFinding]:
+    findings: list[AuditFinding] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name):
+            message = _BANNED_QUALIFIED_CALLS.get((func.value.id, func.attr))
+            if message is not None:
+                findings.append(AuditFinding("DANGEROUS_PATTERN", Severity.HIGH, message, str(path)))
+        for keyword in node.keywords:
+            if (
+                keyword.arg == "shell"
+                and isinstance(keyword.value, ast.Constant)
+                and keyword.value.value is True
+            ):
+                findings.append(
+                    AuditFinding("DANGEROUS_PATTERN", Severity.HIGH, "shell=True is prohibited", str(path))
+                )
+    return findings
+
+
 def _check_sources_and_secrets(root: Path) -> list[AuditFinding]:
     findings: list[AuditFinding] = []
+    dangerous_pattern_roots = (root / "src/racing_lambda", root / "src/racing_maintenance_rsi")
     for path in _source_candidates(root):
         if not path.is_file() or path.stat().st_size > 2_000_000:
             continue
         text = path.read_text(encoding="utf-8", errors="replace")
+        tree: ast.AST | None = None
         if path.suffix == ".py":
             try:
-                ast.parse(text, filename=str(path))
+                tree = ast.parse(text, filename=str(path))
             except SyntaxError as exc:
                 findings.append(AuditFinding("PYTHON_SYNTAX_ERROR", Severity.CRITICAL, str(exc), str(path)))
-        if (root / "src/racing_lambda") in path.parents:
-            for pattern, message in _BANNED_SOURCE_PATTERNS.items():
-                if pattern in text:
-                    findings.append(AuditFinding("DANGEROUS_PATTERN", Severity.HIGH, message, str(path)))
+        if tree is not None and any(source_root in path.parents for source_root in dangerous_pattern_roots):
+            findings.extend(_dangerous_call_findings(tree, path))
         for secret_type, pattern in _SECRET_PATTERNS.items():
             if pattern.search(text):
                 findings.append(AuditFinding("SECRET_LEAK", Severity.CRITICAL, f"high-confidence {secret_type} signature detected", str(path)))

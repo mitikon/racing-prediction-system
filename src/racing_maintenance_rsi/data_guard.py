@@ -5,11 +5,15 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
+import errno
 from hashlib import sha256
+import io
 import json
 import math
+import os
 from pathlib import Path
 import shutil
+import stat as stat_module
 import subprocess
 from typing import Any
 
@@ -74,20 +78,29 @@ class RacingExternalDataGuard:
 
     def inspect(self, path: str | Path, *, require_antivirus: bool = True) -> DataInspection:
         source = Path(path)
-        if source.is_symlink():
-            raise ValueError("symbolic links are prohibited")
-        if not source.is_file():
-            raise ValueError("external data path must be a regular file")
-        size = source.stat().st_size
-        if size > self.max_bytes:
-            return DataInspection(
-                str(source), "", size, False, ("file exceeds configured size limit",),
-                MalwareScan(MalwareStatus.UNAVAILABLE, None, "rejected before reading"),
-            )
         reasons: list[str] = []
+        o_nofollow = getattr(os, "O_NOFOLLOW", 0)
+        try:
+            fd = os.open(source, os.O_RDONLY | o_nofollow)
+        except OSError as exc:
+            if o_nofollow and exc.errno == errno.ELOOP:
+                raise ValueError("symbolic links are prohibited") from exc
+            raise ValueError(f"external data path must be a regular file: {exc}") from exc
+        try:
+            opened_stat = os.fstat(fd)
+            if not stat_module.S_ISREG(opened_stat.st_mode):
+                raise ValueError("external data path must be a regular file")
+            size = opened_stat.st_size
+            if size > self.max_bytes:
+                return DataInspection(
+                    str(source), "", size, False, ("file exceeds configured size limit",),
+                    MalwareScan(MalwareStatus.UNAVAILABLE, None, "rejected before reading or scanning"),
+                )
+            raw = os.read(fd, size)
+        finally:
+            os.close(fd)
         if source.suffix.lower() not in self.ALLOWED_EXTENSIONS:
             reasons.append("file extension is not allow-listed")
-        raw = source.read_bytes()
         if b"\x00" in raw:
             reasons.append("NUL byte detected")
         if raw.startswith(self.EXECUTABLE_MAGIC):
@@ -100,11 +113,19 @@ class RacingExternalDataGuard:
                         raise ValueError("JRA JSON root must be an object")
                     validate_jra_payload(value)
                 elif source.suffix.lower() == ".csv":
-                    pd.read_csv(source, nrows=10)
+                    pd.read_csv(io.BytesIO(raw), nrows=10)
                 else:
                     raw.decode("utf-8")
             except (UnicodeDecodeError, json.JSONDecodeError, pd.errors.ParserError, ValueError) as exc:
                 reasons.append(f"content validation failed: {type(exc).__name__}")
+        # scan_malware re-reads by path (clamscan needs a path), so confirm the
+        # inode we just read from is still what the path resolves to and is not
+        # a symlink before trusting that second read to refer to the same bytes.
+        post_read_stat = source.lstat()
+        if stat_module.S_ISLNK(post_read_stat.st_mode):
+            raise ValueError("symbolic links are prohibited")
+        if post_read_stat.st_ino != opened_stat.st_ino or post_read_stat.st_dev != opened_stat.st_dev:
+            raise ValueError("external data path changed identity during inspection")
         malware = self.scan_malware(source)
         if malware.status in {MalwareStatus.INFECTED, MalwareStatus.ERROR}:
             reasons.append(f"malware scan status is {malware.status.value}")
