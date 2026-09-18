@@ -118,6 +118,7 @@ class RacingRegularizedPCA:
         ratios = eigenvalues / total
         cumulative = np.cumsum(ratios)
         n_components = int(np.searchsorted(cumulative, self.variance_target, side="left") + 1)
+        n_components = min(n_components, len(ratios))
 
         self.eigenvalues_ = eigenvalues[:n_components]
         self.explained_variance_ratio_ = ratios[:n_components]
