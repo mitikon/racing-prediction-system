@@ -17,6 +17,8 @@ from racing_lambda.simple_realtime_rsi import (
     build_three_snapshot_features,
 )
 
+RACE_START = datetime(2026, 9, 13, 5, 30, tzinfo=timezone.utc)
+
 
 def _race_snapshots(race_id: str, race_shift: float = 0.0):
     base = datetime(2026, 9, 13, 5, 0, tzinfo=timezone.utc)
@@ -88,11 +90,19 @@ def test_three_snapshot_learner_uses_only_completed_historical_labels():
         OfficialResult("R3", ("1", "2", "3", "4")),
     ]
     learner = SimpleThreeSnapshotRsiLearner(ridge=1.0).fit(races, results)
-    scored = learner.score(_race_snapshots("LIVE", 0.004))
+    scored = learner.score(_race_snapshots("LIVE", 0.004), scheduled_start=RACE_START)
     assert len(scored) == 4
     assert all(0.0 <= row.top3_probability <= 1.0 for row in scored)
     assert all(0.0 <= row.bug_score <= 1.0 for row in scored)
     assert learner.summary_.rows == 12
+
+
+def test_simple_scoring_rejects_wrong_or_post_start_capture_times():
+    races = [_race_snapshots(f"R{i}", 0.003 * i) for i in range(3)]
+    results = [OfficialResult(f"R{i}", ("1", "2", "3", "4")) for i in range(3)]
+    learner = SimpleThreeSnapshotRsiLearner().fit(races, results)
+    with pytest.raises(ValueError, match="30/15/5"):
+        learner.score(_race_snapshots("LIVE"), scheduled_start=RACE_START + timedelta(minutes=5))
 
 
 def test_simple_lambda_accepts_three_snapshot_rsi_as_optional_market_layer():
@@ -105,14 +115,14 @@ def test_simple_lambda_accepts_three_snapshot_rsi_as_optional_market_layer():
         rain=False,
         projected_front_runners=3,
     )
-    baseline = SimpleLeadingSignalLambdaV02().rank(context, _horses())
+    baseline = SimpleLeadingSignalLambdaV02().rank_research(context, _horses())
     live_signals = [
         SimpleRealtimeRsiSignal("1", 0.88, 0.91, 12),
         SimpleRealtimeRsiSignal("2", 0.30, 0.20, 12),
         SimpleRealtimeRsiSignal("3", 0.75, 0.80, 12),
         SimpleRealtimeRsiSignal("4", 0.15, 0.10, 12),
     ]
-    enriched = SimpleLeadingSignalLambdaV02().rank(
+    enriched = SimpleLeadingSignalLambdaV02().rank_research(
         context, _horses(), realtime_rsi_signals=live_signals
     )
     assert not any(row.realtime_rsi_used for row in baseline.lambda_overall_final)
@@ -133,10 +143,10 @@ def test_dated_simple_rsi_training_flows_directly_to_lambda_without_future_resul
     tomorrow = [replace(row, race_id="TARGET",
                         captured_at=row.captured_at + timedelta(days=1))
                 for row in _race_snapshots("TARGET")]
-    signals = learner.score(tomorrow)
+    signals = learner.score(tomorrow, scheduled_start=RACE_START + timedelta(days=1))
     assert all(row.trained_until == known_at and row.snapshot_count == 3
                for row in signals)
     with pytest.raises(ValueError, match="dated RSI training results"):
-        learner.score(_race_snapshots("TARGET"))
+        learner.score(_race_snapshots("TARGET"), scheduled_start=RACE_START)
     with pytest.raises(ValueError, match="target race"):
-        learner.score(_race_snapshots("R0"))
+        learner.score(_race_snapshots("R0"), scheduled_start=RACE_START)
