@@ -15,6 +15,9 @@ from racing_lambda import (
     parameter_manifest_digest,
     trial_manifest_digest,
     validate_recursive_rsi_successor,
+    approve_promotion,
+    approved_parameters,
+    verify_promotion_report,
 )
 
 
@@ -149,6 +152,9 @@ def test_settlement_cannot_replace_a_frozen_prediction():
 
 def test_recursive_successor_must_chain_and_remain_in_mode():
     report = RacingRecursiveImprovementGate("full").evaluate(candidate(), observations(), trial_rows())
+    approval = approve_promotion(
+        report, candidate(), approver="human-reviewer", approved_at=CREATED + timedelta(days=20)
+    )
     params = {"rsi_weight": 0.25}
     child = candidate(
         candidate_id="full-rsi-g2",
@@ -158,10 +164,32 @@ def test_recursive_successor_must_chain_and_remain_in_mode():
         parameters=params,
         parameter_manifest_sha256=parameter_manifest_digest(params),
     )
-    validate_recursive_rsi_successor(report, child)
+    validate_recursive_rsi_successor(report, child, approval)
     with pytest.raises(ValueError, match="cannot be mixed"):
         validate_recursive_rsi_successor(report, candidate(
             "simple", candidate_id="simple-g2", generation=2,
             parent_version=report.candidate_id,
             parent_report_sha256=report.report_sha256,
-        ))
+        ), approval)
+
+
+def test_promotion_requires_integrity_checked_human_approval():
+    item = candidate()
+    report = RacingRecursiveImprovementGate("full").evaluate(item, observations(), trial_rows())
+    verify_promotion_report(report)
+    approval = approve_promotion(
+        report, item, approver="human-reviewer", approved_at=CREATED + timedelta(days=20)
+    )
+    assert approved_parameters(item, report, approval) == item.parameters
+    forged = type(report)(**{**report.__dict__, "candidate_top3_hits": 0})
+    with pytest.raises(ValueError, match="integrity"):
+        verify_promotion_report(forged)
+
+
+def test_rejected_candidate_cannot_be_human_approved():
+    item = candidate("simple")
+    report = RacingRecursiveImprovementGate("simple").evaluate(
+        item, observations("simple", better=False), trial_rows("simple")
+    )
+    with pytest.raises(ValueError, match="only PROMOTION_PROPOSED"):
+        approve_promotion(report, item, approver="human-reviewer", approved_at=CREATED + timedelta(days=20))
