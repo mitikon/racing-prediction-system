@@ -255,11 +255,31 @@ class SimpleThreeSnapshotRsiLearner:
         )
         return self
 
-    def score(self, snapshots: Sequence[OddsSnapshot]) -> list[SimpleRealtimeRsiSignal]:
+    def score(
+        self,
+        snapshots: Sequence[OddsSnapshot],
+        *,
+        scheduled_start: datetime,
+        timing_tolerance_seconds: int = 90,
+    ) -> list[SimpleRealtimeRsiSignal]:
         if not hasattr(self, "coefficients_"):
             raise RuntimeError("fit must be called before three-snapshot RSI scoring")
         if not snapshots:
             raise ValueError("three PRE_RACE snapshots are required")
+        if scheduled_start.tzinfo is None or scheduled_start.utcoffset() is None:
+            raise ValueError("scheduled_start must be timezone-aware")
+        if timing_tolerance_seconds < 0:
+            raise ValueError("timing_tolerance_seconds cannot be negative")
+        captured_times = sorted({row.captured_at for row in snapshots})
+        if len(captured_times) != 3 or any(when >= scheduled_start for when in captured_times):
+            raise ValueError("simple RSI requires three distinct before-start capture times")
+        actual_offsets = tuple(
+            int((scheduled_start - when).total_seconds()) for when in captured_times
+        )
+        expected_offsets = tuple(minutes * 60 for minutes in EXPECTED_MINUTES_BEFORE_START)
+        if any(abs(actual - expected) > timing_tolerance_seconds
+               for actual, expected in zip(actual_offsets, expected_offsets)):
+            raise ValueError("simple RSI snapshots must be captured at 30/15/5 minutes before start")
         if snapshots[0].race_id in self.historical_race_ids_:
             raise ValueError("target race cannot be part of RSI training")
         captured_at = max(row.captured_at for row in snapshots)
