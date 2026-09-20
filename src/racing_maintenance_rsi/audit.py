@@ -107,6 +107,8 @@ def _check_core(root: Path) -> list[AuditFinding]:
         root / "src/racing_lambda/jra_official_free_ingestion.py",
         root / "src/racing_lambda/freeze.py",
         root / "src/racing_lambda/recursive_self_improvement.py",
+        root / "src/racing_lambda/controlled_rsi_validation.py",
+        root / "src/racing_maintenance_rsi/data_guard.py",
     )
     for path in required:
         if not path.is_file():
@@ -128,7 +130,8 @@ def _check_core(root: Path) -> list[AuditFinding]:
         findings.append(AuditFinding("FROZEN_WRITE_WEAKENED", Severity.CRITICAL, "prediction freeze must use exclusive creation", str(required[4])))
     if 'target.open("x"' not in snapshot_text:
         findings.append(AuditFinding("SNAPSHOT_WRITE_WEAKENED", Severity.CRITICAL, "snapshot freeze must use exclusive creation", str(required[3])))
-    if 'phase != "PRE_RACE"' not in required[1].read_text(encoding="utf-8"):
+    full_text = required[1].read_text(encoding="utf-8")
+    if 'phase != "PRE_RACE"' not in full_text:
         findings.append(AuditFinding("RESULT_GATE_MISSING", Severity.CRITICAL, "RESULT snapshots must be rejected from prediction input", str(required[1])))
     recursive_text = required[5].read_text(encoding="utf-8")
     for required_guard in (
@@ -136,9 +139,34 @@ def _check_core(root: Path) -> list[AuditFinding]:
         '"autonomous_main_merge": False',
         '"betting_authority": False',
         '"human_approval_required": True',
+        "def verify_promotion_report(",
+        "def approved_parameters(",
+        'status="HUMAN_APPROVED"',
     ):
         if required_guard not in recursive_text:
             findings.append(AuditFinding("RECURSIVE_RSI_GUARD_REMOVED", Severity.CRITICAL, f"required recursive RSI guard is missing: {required_guard}", str(required[5])))
+    controlled_text = required[6].read_text(encoding="utf-8")
+    if "class ControlledRsiValidationLoop" not in controlled_text:
+        findings.append(AuditFinding("RSI_OPERATIONAL_LOOP_MISSING", Severity.CRITICAL, "controlled RSI operational loop is missing", str(required[6])))
+    simple_path = root / "src/racing_lambda/simple_leading_signal_v02.py"
+    simple_text = simple_path.read_text(encoding="utf-8") if simple_path.is_file() else ""
+    entrypoint_guards = (
+        ("validation_loop.run_full_prediction", full_text, required[1]),
+        ("def score_jra_race_research(", full_text, required[1]),
+        ("validation_loop.run_simple_prediction", simple_text, simple_path),
+        ("def rank_research(", simple_text, simple_path),
+        ("class ControlledPrediction", controlled_text, required[6]),
+    )
+    for guard, source, path in entrypoint_guards:
+        if guard not in source:
+            findings.append(AuditFinding(
+                "RSI_PREDICTION_ENTRYPOINT_DISCONNECTED",
+                Severity.CRITICAL,
+                f"official prediction control is missing: {guard}",
+                str(path),
+            ))
+    if "inspect_with_content" not in required[7].read_text(encoding="utf-8"):
+        findings.append(AuditFinding("TOCTOU_GUARD_MISSING", Severity.CRITICAL, "inspected bytes must flow directly into ingestion", str(required[7])))
     return findings
 
 
@@ -157,12 +185,38 @@ def _source_candidates(root: Path) -> list[Path]:
 
 def _dangerous_call_findings(tree: ast.AST, path: Path) -> list[AuditFinding]:
     findings: list[AuditFinding] = []
+    module_aliases: dict[str, str] = {}
+    imported_calls: dict[str, tuple[str, str]] = {}
+    shell_kwargs_names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for item in node.names:
+                module_aliases[item.asname or item.name] = item.name
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            for item in node.names:
+                imported_calls[item.asname or item.name] = (node.module, item.name)
+        elif isinstance(node, (ast.Assign, ast.AnnAssign)):
+            value = node.value
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            if isinstance(value, ast.Dict) and any(
+                isinstance(key, ast.Constant) and key.value == "shell"
+                and isinstance(item, ast.Constant) and item.value is True
+                for key, item in zip(value.keys, value.values)
+            ):
+                shell_kwargs_names.update(
+                    target.id for target in targets if isinstance(target, ast.Name)
+                )
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
         func = node.func
         if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name):
-            message = _BANNED_QUALIFIED_CALLS.get((func.value.id, func.attr))
+            module = module_aliases.get(func.value.id, func.value.id)
+            message = _BANNED_QUALIFIED_CALLS.get((module, func.attr))
+            if message is not None:
+                findings.append(AuditFinding("DANGEROUS_PATTERN", Severity.HIGH, message, str(path)))
+        elif isinstance(func, ast.Name):
+            message = _BANNED_QUALIFIED_CALLS.get(imported_calls.get(func.id, ("", "")))
             if message is not None:
                 findings.append(AuditFinding("DANGEROUS_PATTERN", Severity.HIGH, message, str(path)))
         for keyword in node.keywords:
@@ -173,6 +227,14 @@ def _dangerous_call_findings(tree: ast.AST, path: Path) -> list[AuditFinding]:
             ):
                 findings.append(
                     AuditFinding("DANGEROUS_PATTERN", Severity.HIGH, "shell=True is prohibited", str(path))
+                )
+            elif (
+                keyword.arg is None
+                and isinstance(keyword.value, ast.Name)
+                and keyword.value.id in shell_kwargs_names
+            ):
+                findings.append(
+                    AuditFinding("DANGEROUS_PATTERN", Severity.HIGH, "indirect shell=True is prohibited", str(path))
                 )
     return findings
 
@@ -233,6 +295,11 @@ def audit_repository(root: str | Path) -> AuditReport:
             "workflow_least_privilege",
             "action_sha_pinning",
             "recursive_rsi_human_promotion_gate",
+            "promotion_report_integrity_recheck",
+            "controlled_rsi_operational_loop",
+            "mandatory_rsi_prediction_entrypoints",
+            "same_bytes_ingestion",
+            "ast_import_alias_resolution",
         ),
     )
 
