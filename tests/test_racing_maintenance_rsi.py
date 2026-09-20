@@ -123,6 +123,21 @@ def test_maintenance_rsi_package_itself_is_in_scan_scope(tmp_path):
     assert any(finding.code == "DANGEROUS_PATTERN" for finding in findings)
 
 
+def test_ast_scan_resolves_import_aliases_and_indirect_shell_kwargs(tmp_path):
+    source_dir = tmp_path / "src" / "racing_lambda"
+    source_dir.mkdir(parents=True)
+    (source_dir / "evil.py").write_text(
+        "import pickle as p\n"
+        "from yaml import unsafe_load as load_bad\n"
+        "import subprocess\n"
+        "options = {'shell': True}\n"
+        "p.loads(b'x')\nload_bad('x')\nsubprocess.run('x', **options)\n",
+        encoding="utf-8",
+    )
+    findings = _check_sources_and_secrets(tmp_path)
+    assert sum(finding.code == "DANGEROUS_PATTERN" for finding in findings) == 3
+
+
 def test_inode_swap_between_read_and_malware_scan_is_rejected(tmp_path, monkeypatch):
     source = tmp_path / "odds.json"
     source.write_text("{}", encoding="utf-8")
@@ -167,3 +182,20 @@ def test_guarded_json_file_is_connected_to_official_snapshot_ingestion(tmp_path,
     assert inspection.accepted
     assert snapshot.phase == "PRE_RACE"
     assert snapshot.payload_sha256
+
+
+def test_ingestion_uses_inspected_bytes_even_if_source_changes_during_scan(tmp_path, monkeypatch):
+    source = tmp_path / "jra_pre_race.json"
+    original = {"market_support": [{"horse_id": "1", "support": {"win": 0.2}}]}
+    replacement = {"market_support": [{"horse_id": "99", "support": {"win": 0.9}}]}
+    source.write_text(json.dumps(original), encoding="utf-8")
+
+    def mutate_source(_scan_copy):
+        source.write_text(json.dumps(replacement), encoding="utf-8")
+        return MalwareScan(MalwareStatus.CLEAN, "test", "clean")
+
+    monkeypatch.setattr(RacingExternalDataGuard, "scan_malware", staticmethod(mutate_source))
+    snapshot, _ = ingest_snapshot_file(
+        path=source, race_id="R1", phase="PRE_RACE", source_url="https://www.jra.go.jp/"
+    )
+    assert snapshot.payload["market_support"][0]["horse_id"] == "1"
