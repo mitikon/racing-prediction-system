@@ -15,6 +15,7 @@ from pathlib import Path
 import shutil
 import stat as stat_module
 import subprocess
+import tempfile
 from typing import Any
 
 import pandas as pd
@@ -77,6 +78,13 @@ class RacingExternalDataGuard:
         return MalwareScan(MalwareStatus.ERROR, "clamscan", detail)
 
     def inspect(self, path: str | Path, *, require_antivirus: bool = True) -> DataInspection:
+        inspection, _ = self.inspect_with_content(path, require_antivirus=require_antivirus)
+        return inspection
+
+    def inspect_with_content(
+        self, path: str | Path, *, require_antivirus: bool = True
+    ) -> tuple[DataInspection, bytes]:
+        """Return the exact inspected bytes so callers never reopen the source."""
         source = Path(path)
         reasons: list[str] = []
         o_nofollow = getattr(os, "O_NOFOLLOW", 0)
@@ -92,11 +100,29 @@ class RacingExternalDataGuard:
                 raise ValueError("external data path must be a regular file")
             size = opened_stat.st_size
             if size > self.max_bytes:
-                return DataInspection(
-                    str(source), "", size, False, ("file exceeds configured size limit",),
-                    MalwareScan(MalwareStatus.UNAVAILABLE, None, "rejected before reading or scanning"),
+                return (
+                    DataInspection(
+                        str(source), "", size, False, ("file exceeds configured size limit",),
+                        MalwareScan(MalwareStatus.UNAVAILABLE, None, "rejected before reading or scanning"),
+                    ),
+                    b"",
                 )
-            raw = os.read(fd, size)
+            chunks: list[bytes] = []
+            remaining = size
+            while remaining:
+                chunk = os.read(fd, min(remaining, 1024 * 1024))
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                remaining -= len(chunk)
+            raw = b"".join(chunks)
+            closed_stat = os.fstat(fd)
+            if len(raw) != size or (
+                closed_stat.st_size != opened_stat.st_size
+                or closed_stat.st_mtime_ns != opened_stat.st_mtime_ns
+                or closed_stat.st_ctime_ns != opened_stat.st_ctime_ns
+            ):
+                raise ValueError("external data changed while being read")
         finally:
             os.close(fd)
         if source.suffix.lower() not in self.ALLOWED_EXTENSIONS:
@@ -118,20 +144,33 @@ class RacingExternalDataGuard:
                     raw.decode("utf-8")
             except (UnicodeDecodeError, json.JSONDecodeError, pd.errors.ParserError, ValueError) as exc:
                 reasons.append(f"content validation failed: {type(exc).__name__}")
-        # scan_malware re-reads by path (clamscan needs a path), so confirm the
-        # inode we just read from is still what the path resolves to and is not
-        # a symlink before trusting that second read to refer to the same bytes.
+        # Preserve the source identity check, but scan a private copy of the
+        # exact bytes above. Neither clamscan nor the caller reopens `source`.
         post_read_stat = source.lstat()
         if stat_module.S_ISLNK(post_read_stat.st_mode):
             raise ValueError("symbolic links are prohibited")
         if post_read_stat.st_ino != opened_stat.st_ino or post_read_stat.st_dev != opened_stat.st_dev:
             raise ValueError("external data path changed identity during inspection")
-        malware = self.scan_malware(source)
+        with tempfile.TemporaryDirectory(prefix="racing-rsi-scan-") as temporary:
+            scan_path = Path(temporary) / f"payload{source.suffix.lower()}"
+            descriptor = os.open(scan_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            try:
+                view = memoryview(raw)
+                while view:
+                    written = os.write(descriptor, view)
+                    view = view[written:]
+                os.fsync(descriptor)
+            finally:
+                os.close(descriptor)
+            malware = self.scan_malware(scan_path)
         if malware.status in {MalwareStatus.INFECTED, MalwareStatus.ERROR}:
             reasons.append(f"malware scan status is {malware.status.value}")
         if require_antivirus and malware.status is MalwareStatus.UNAVAILABLE:
             reasons.append("mandatory antivirus scanner is unavailable")
-        return DataInspection(str(source), sha256(raw).hexdigest(), size, not reasons, tuple(reasons), malware)
+        return (
+            DataInspection(str(source), sha256(raw).hexdigest(), size, not reasons, tuple(reasons), malware),
+            raw,
+        )
 
     @staticmethod
     def quarantine(path: str | Path, quarantine_root: str | Path) -> Path:
