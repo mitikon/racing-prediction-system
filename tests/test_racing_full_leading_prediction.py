@@ -4,6 +4,8 @@ import json
 import pandas as pd
 import pytest
 
+RACE_START = datetime(2026, 9, 9, 4, 0, tzinfo=timezone.utc)
+
 from racing_lambda import (
     FULL_LEADING_PREDICTION_NAME,
     SIMPLE_LEADING_PREDICTION_NAME,
@@ -100,7 +102,7 @@ def test_full_model_fits_and_scores_sparse_free_jra_ticket_history():
         prior_races=[race_history("PRIOR", 0.01)],
     )
     assert len(model.feature_columns_) >= 2
-    results = model.score_jra_race(race_history("TARGET", 0.02))
+    results = model.score_jra_race_research(race_history("TARGET", 0.02), scheduled_start=RACE_START)
     assert len(results) == 4
     assert {row.horse_id for row in results} == {"1", "2", "3", "4"}
     assert all(0.0 <= row.anomaly_score <= 1.0 for row in results)
@@ -110,11 +112,19 @@ def test_full_model_fits_and_scores_sparse_free_jra_ticket_history():
 def test_full_model_requires_fit_and_enable_before_scoring():
     disabled = FullLeadingPredictionLambda(enabled=False)
     with pytest.raises(RuntimeError, match="disabled"):
-        disabled.score_jra_race(race_history("TARGET"))
+        disabled.score_jra_race_research(race_history("TARGET"), scheduled_start=RACE_START)
 
     enabled = FullLeadingPredictionLambda(enabled=True)
     with pytest.raises(RuntimeError, match="fit_from_jra_history"):
-        enabled.score_jra_race(race_history("TARGET"))
+        enabled.score_jra_race_research(race_history("TARGET"), scheduled_start=RACE_START)
+
+
+def test_full_model_rejects_post_start_snapshot_even_without_adaptive_bridge():
+    model = FullLeadingPredictionLambda(enabled=True).fit_from_jra_history(
+        recent_races=[race_history("RECENT")], prior_races=[race_history("PRIOR", 0.01)]
+    )
+    with pytest.raises(ValueError, match="before-start"):
+        model.score_jra_race_research(race_history("TARGET"), scheduled_start=datetime(2026, 9, 9, 3, 4, tzinfo=timezone.utc))
 
 
 def test_result_snapshot_can_never_enter_full_leading_prediction():
@@ -192,7 +202,7 @@ def test_rsi_self_learning_uses_only_prior_results_and_scores_target_race():
     )
     assert model.rsi_feature_version == RACING_RSI_FEATURE_VERSION
     assert model.rsi_learning_summary_.rows == 16
-    scored = model.score_jra_race(dense_race_history("TARGET", 1))
+    scored = model.score_jra_race_research(dense_race_history("TARGET", 1), scheduled_start=RACE_START)
     assert all(row.rsi_self_learning_score is not None for row in scored)
     assert all(0.0 <= row.combined_score <= 1.0 for row in scored)
     assert all(row.rsi_feature_count > 0 for row in scored)
@@ -215,7 +225,7 @@ def test_target_result_cannot_be_supplied_to_pre_race_scoring():
     )
     model = FullLeadingPredictionLambda(enabled=True)
     with pytest.raises(ValueError, match="RESULT snapshots cannot enter"):
-        model.score_jra_race([result])
+        model.score_jra_race_research([result], scheduled_start=RACE_START)
 
 
 def test_full_lambda_adaptive_rsi_keeps_pca_regularization_and_blocks_old_target():
@@ -253,12 +263,12 @@ def test_full_lambda_adaptive_rsi_keeps_pca_regularization_and_blocks_old_target
         observed_at=datetime.fromisoformat(row.observed_at) + timedelta(days=1),
         payload=row.payload,
     ) for row in dense_race_history("TARGET", 1)]
-    scored = model.score_jra_race(
+    scored = model.score_jra_race_research(
         target, scheduled_start=datetime(2026, 9, 10, 4, tzinfo=timezone.utc)
     )
     assert all(row.adaptive_rsi_weight == model.adaptive_rsi_bridge.weight_ for row in scored)
     assert RECENT_CORRELATION_WEIGHT == 0.10
     assert PRIOR_CORRELATION_WEIGHT == 0.90
     with pytest.raises(ValueError, match="training history"):
-        model.score_jra_race(dense_race_history("TARGET", 1),
+        model.score_jra_race_research(dense_race_history("TARGET", 1),
                              scheduled_start=datetime(2026, 9, 9, 4, tzinfo=timezone.utc))
