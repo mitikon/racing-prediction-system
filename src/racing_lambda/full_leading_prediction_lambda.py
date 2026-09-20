@@ -158,6 +158,10 @@ class FullLeadingPredictionLambda:
     def enabled(self, value: bool) -> None:
         self._core.enabled = bool(value)
 
+    def rsi_candidate_parameters(self) -> dict[str, object]:
+        """Parameters this prediction path can actually apply and attest."""
+        return {"rsi_weight": self.rsi_weight}
+
     @property
     def model(self):
         return self._core.model
@@ -250,19 +254,54 @@ class FullLeadingPredictionLambda:
         self,
         snapshots: Sequence[OfficialSnapshot],
         *,
-        scheduled_start: datetime | None = None,
+        scheduled_start: datetime,
+        validation_loop,
+        baseline_model: "FullLeadingPredictionLambda",
+        prediction_frozen_at: datetime,
+        registered_at: datetime | None = None,
+    ):
+        """Official 本格先行予測λ entry point; PRE_RACE freeze is mandatory."""
+        from .controlled_rsi_validation import ControlledRsiValidationLoop
+
+        if not isinstance(validation_loop, ControlledRsiValidationLoop):
+            raise TypeError("validation_loop must be ControlledRsiValidationLoop")
+        if not isinstance(baseline_model, FullLeadingPredictionLambda):
+            raise TypeError("baseline_model must be FullLeadingPredictionLambda")
+        return validation_loop.run_full_prediction(
+            baseline_model=baseline_model,
+            candidate_model=self,
+            snapshots=snapshots,
+            scheduled_start=scheduled_start,
+            prediction_frozen_at=prediction_frozen_at,
+            registered_at=registered_at,
+        )
+
+    def score_jra_race_research(
+        self,
+        snapshots: Sequence[OfficialSnapshot],
+        *,
+        scheduled_start: datetime,
+    ) -> list[MarketSignalResult]:
+        """Unattested research scoring; never valid as an official prediction."""
+        return self._score_jra_race_core(snapshots, scheduled_start=scheduled_start)
+
+    def _score_jra_race_core(
+        self,
+        snapshots: Sequence[OfficialSnapshot],
+        *,
+        scheduled_start: datetime,
     ) -> list[MarketSignalResult]:
         """Score one race using PRE_RACE observations only."""
         if not self.enabled:
             raise RuntimeError("本格先行予測λ is disabled")
         # Reject same-race RESULT leakage before checking model readiness.
         rows = odds_snapshots_from_official(snapshots)
+        if scheduled_start.tzinfo is None or scheduled_start.utcoffset() is None:
+            raise ValueError("scheduled_start must be timezone-aware")
+        if any(row.captured_at >= scheduled_start for row in rows):
+            raise ValueError("本格先行予測λ requires only before-start snapshots")
         bridge = self.adaptive_rsi_bridge
         if bridge is not None:
-            if scheduled_start is None or scheduled_start.tzinfo is None or scheduled_start.utcoffset() is None:
-                raise ValueError("adaptive RSI needs a timezone-aware scheduled_start")
-            if any(row.captured_at >= scheduled_start for row in rows):
-                raise ValueError("adaptive RSI requires only before-start snapshots")
             if rows[0].race_id in self.history_race_ids_ or min(row.captured_at for row in rows) <= self.history_last_observed_at_:
                 raise ValueError("target must follow the full RSI/PCA training history")
             if min(row.captured_at for row in rows) <= self.rsi_history_result_known_at_:

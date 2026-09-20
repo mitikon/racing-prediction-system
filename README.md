@@ -78,8 +78,8 @@ ChatGPTがこのチャットで予想を行い、ユーザーが正式結果を�
 
 `AdaptiveRsiBridge("full")` と `AdaptiveRsiBridge("simple")` は独立した学習状態です。各モードで**予想時に固定した**全出走馬のλスコア、RSIスコア、公式出走頭数 `field_size`、発走時刻、予測固定時刻、RSIが参照した結果の最終時刻、正式結果の判明時刻・3着内ラベルを `RsiBridgeObservation` に入力します。両スコアは [0,1] の同じ尺度で記録します。公式出走頭数と全馬レコードが一致し、出走馬5頭以上・3着内3頭・8レース以上の時だけ、先頭のレースで候補重みを学習し、後方25%（最低2レース）の時系列検証でλ単独より3着内ラベルとの平均二乗誤差が改善した場合にのみRSI重みを採用します。元のλ異常値は確率校正済みとはみなさず、この誤差は重み選択用の代理指標です。候補重みには二乗ペナルティと上限0.50を設け、改善しなければ0に戻します。これは**スコア結合の正則化**であり、本格型の固定PCA相関比 `0.10×直近 + 0.90×事前` を変更しません。
 
-- 本格型: `fit_from_jra_history(..., historical_results=..., historical_result_known_at=...)` で過去のPRE_RACEと結果時刻を検査し、`fit_rsi_bridge(full_records, prediction_at=...)` の後、`score_jra_race(target_snapshots, scheduled_start=...)` で発走前だけを評価します。
-- 簡易式: `SimpleThreeSnapshotRsiLearner.fit(..., result_known_at=...)` に発走30/15/5分前相当のオッズと過去の結果時刻を与え、`score(target_snapshots)` から時刻を付けた全馬シグナルを取得します。`SimpleLeadingPredictionLambda().fit_rsi_bridge(simple_records, prediction_at=...).rank(context, horses, signals, captured_at=...)` が競走データλとRSIを総合順位で直接結合します。`context.scheduled_start` は必須です。従来の市場バグ評価は別欄に残します。
+- 本格型: `fit_from_jra_history(..., historical_results=..., historical_result_known_at=...)` で過去のPRE_RACEと結果時刻を検査し、`fit_rsi_bridge(full_records, prediction_at=...)` の後、正式API `score_jra_race(..., validation_loop=..., baseline_model=..., prediction_frozen_at=...)` を呼びます。このAPIは現行版と候補版を同じ入力で評価し、PRE_RACE固定に成功するまで予測を返しません。
+- 簡易式: `SimpleThreeSnapshotRsiLearner.fit(..., result_known_at=...)` に発走30/15/5分前相当のオッズと過去の結果時刻を与え、`score(target_snapshots)` から時刻を付けた全馬シグナルを取得します。正式API `SimpleLeadingPredictionLambda().rank(..., captured_at=..., validation_loop=..., baseline_model=..., prediction_frozen_at=...)` もPRE_RACE固定を必須とします。`context.scheduled_start` は必須です。従来の市場バグ評価は別欄に残します。
 
 簡易式の3時点では期間14のWilder RSIは算出できません。算出可能な**期間2の短期RSI**を別特徴量として加え、既存の3時点変化・加速度と分けます。現在の9月13日の検証画像は単一時点オッズと手動順位だけのため、上記の学習条件を満たさず係数更新は実施していません。データ取得と永続化は別途必要で、コードは未検証の精度向上を約束しません。施行後の仮想予想は学習入力に使用できません。
 
@@ -88,3 +88,9 @@ ChatGPTがこのチャットで予想を行い、ユーザーが正式結果を�
 相対力指数RSIとは別に、`RacingRecursiveImprovementGate("full")`と`RacingRecursiveImprovementGate("simple")`が本格型・簡易式を独立して世代管理します。候補設定、親世代、Gitコミットを凍結し、入力、現行予測、候補予測、候補マニフェストを発走前の試行記録へ書き込み禁止形式で固定します。後日判明した正式結果だけで評価し、試行記録とのハッシュ不一致は評価対象にできません。
 
 各モード8レース以上についてBrier損失、上位3頭抽出、回収率、最大バグ検知の全条件が現行版以上の場合だけ`PROMOTION_PROPOSED`を生成します。合格案も人間承認用のPR候補に留まり、ソース変更、`main`マージ、賭けは自動実行しません。本格型の固定PCA比`0.10×直近 + 0.90×事前`は改善対象外で、本格型と簡易式の学習記録も混合できません。
+
+`ControlledRsiValidationLoop`は、本格型と簡易式を別ディレクトリに分離し、候補、入力、現行予測、候補予測を`PRE_RACE`へ書き込み禁止で保存してから、`RESULT`評価を追加します。昇格レポートは保存時と後継世代作成時にSHA-256を再計算します。`PROMOTION_PROPOSED`だけでは候補パラメータを読み込めず、記名された`HUMAN_APPROVED`記録を別途固定した後に限り、`approved_parameters`がパラメータを返します。
+
+`score_jra_race_research`と`rank_research`は比較・単体研究専用で、PRE_RACE証跡を持たないため正式予測として扱いません。実戦記録に採用できるのは、正式APIが返す`ControlledPrediction`だけです。正式APIは発走前時刻、入力取得時刻、候補モード、書き込み禁止PRE_RACE保存を検査し、保存済みレースへの再出力を失敗終了します。
+
+本格先行予測λのスコアリングではタイムゾーン付き発走時刻が必須で、発走後スナップショットを常に拒否します。簡易式先行予測λは発走30分前・15分前・5分前の3時点を許容誤差付きで強制します。外部ファイルは検査済みの同一バイト列をJSON取込みへ直接渡すため、マルウェア検査後に元パスを再読込しません。

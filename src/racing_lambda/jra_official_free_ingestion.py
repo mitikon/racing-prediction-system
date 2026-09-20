@@ -103,10 +103,12 @@ def ingest_snapshot_file(
     if source.suffix.lower() != ".json":
         raise ValueError("snapshot ingestion requires a JSON file")
     inspector = guard or RacingExternalDataGuard()
-    inspection = inspector.inspect(source, require_antivirus=require_antivirus)
+    inspection, inspected_raw = inspector.inspect_with_content(
+        source, require_antivirus=require_antivirus
+    )
     if not inspection.accepted:
         raise ValueError(f"maintenance RSI rejected external data: {list(inspection.reasons)}")
-    data = json.loads(source.read_text(encoding="utf-8"))
+    data = json.loads(inspected_raw.decode("utf-8"))
     if not isinstance(data, Mapping):
         raise ValueError("JRA snapshot JSON root must be an object")
     snapshot = ingest_snapshot(
@@ -117,6 +119,8 @@ def ingest_snapshot_file(
         observed_at=observed_at,
         code_commit_sha=code_commit_sha,
     )
+    if sha256(inspected_raw).hexdigest() != inspection.sha256:
+        raise ValueError("inspected file digest does not match ingested bytes")
     return snapshot, inspection
 
 

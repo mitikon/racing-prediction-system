@@ -93,12 +93,12 @@ def test_simple_lambda_joins_rsi_only_after_training_and_before_next_start():
     model = SimpleLeadingSignalLambdaV02().fit_rsi_bridge(
         frozen_history(), prediction_at=TARGET
     )
-    output = model.rank(context, horses, signals, captured_at=TARGET)
+    output = model.rank_research(context, horses, signals, captured_at=TARGET)
     assert all(row.adaptive_rsi_weight == model.adaptive_rsi_bridge.weight_
                for row in output.lambda_overall_final)
     assert all(row.realtime_rsi_used for row in output.lambda_overall_final)
     with pytest.raises(ValueError, match="all runners"):
-        model.rank(context, horses, signals[:-1], captured_at=TARGET)
+        model.rank_research(context, horses, signals[:-1], captured_at=TARGET)
     with pytest.raises(ValueError, match="future scheduled_start"):
-        model.rank(replace(context, scheduled_start=TARGET), horses,
+        model.rank_research(replace(context, scheduled_start=TARGET), horses,
                    signals, captured_at=TARGET)

@@ -18,7 +18,7 @@ from typing import Literal, Mapping, Sequence
 
 
 Mode = Literal["full", "simple"]
-RECURSIVE_SELF_IMPROVEMENT_VERSION = "racing-recursive-self-improvement-v1"
+RECURSIVE_SELF_IMPROVEMENT_VERSION = "racing-recursive-self-improvement-v2"
 FIXED_RECENT_CORRELATION_WEIGHT = 0.10
 FIXED_PRIOR_CORRELATION_WEIGHT = 0.90
 ALLOWED_PARAMETERS: Mapping[str, frozenset[str]] = {
@@ -209,7 +209,18 @@ class RacingPromotionReport:
     baseline_max_bug_hits: int
     candidate_max_bug_hits: int
     gates: Mapping[str, bool]
+    candidate_manifest_sha256: str
     report_sha256: str
+
+    def __post_init__(self) -> None:
+        if self.status not in ("PROMOTION_PROPOSED", "REJECTED"):
+            raise ValueError("invalid promotion report status")
+        if self.mode not in ("full", "simple"):
+            raise ValueError("invalid promotion report mode")
+        if self.generation < 1 or self.evaluated_races < 1:
+            raise ValueError("invalid promotion report generation or race count")
+        _digest(self.candidate_manifest_sha256, "candidate_manifest_sha256")
+        _digest(self.report_sha256, "report_sha256")
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -221,6 +232,136 @@ class RacingPromotionReport:
             "investment_system_access": False,
             "human_approval_required": True,
         }
+
+
+def _promotion_report_unsigned(report: RacingPromotionReport) -> dict[str, object]:
+    return {
+        "version": RECURSIVE_SELF_IMPROVEMENT_VERSION,
+        "status": report.status,
+        "mode": report.mode,
+        "candidate_id": report.candidate_id,
+        "generation": report.generation,
+        "evaluated_races": report.evaluated_races,
+        "baseline_mean_brier_loss": report.baseline_mean_brier_loss,
+        "candidate_mean_brier_loss": report.candidate_mean_brier_loss,
+        "loss_improvement": report.loss_improvement,
+        "baseline_top3_hits": report.baseline_top3_hits,
+        "candidate_top3_hits": report.candidate_top3_hits,
+        "baseline_mean_recovery_rate": report.baseline_mean_recovery_rate,
+        "candidate_mean_recovery_rate": report.candidate_mean_recovery_rate,
+        "baseline_max_bug_hits": report.baseline_max_bug_hits,
+        "candidate_max_bug_hits": report.candidate_max_bug_hits,
+        "gates": dict(report.gates),
+        "candidate_manifest_sha256": report.candidate_manifest_sha256,
+    }
+
+
+def verify_promotion_report(report: RacingPromotionReport) -> None:
+    """Fail closed if a proposal was forged or changed after evaluation."""
+    expected = sha256(_canonical(_promotion_report_unsigned(report))).hexdigest()
+    if report.report_sha256 != expected:
+        raise ValueError("promotion report integrity check failed")
+    gates_pass = bool(report.gates) and all(value is True for value in report.gates.values())
+    expected_status = "PROMOTION_PROPOSED" if gates_pass else "REJECTED"
+    if report.status != expected_status:
+        raise ValueError("promotion report status does not match its gates")
+
+
+@dataclass(frozen=True)
+class RacingHumanApproval:
+    """Write-once human decision required before candidate parameters can load."""
+
+    status: Literal["HUMAN_APPROVED"]
+    mode: Mode
+    candidate_id: str
+    generation: int
+    approver: str
+    approved_at: datetime
+    report_sha256: str
+    candidate_manifest_sha256: str
+
+    def __post_init__(self) -> None:
+        if self.status != "HUMAN_APPROVED":
+            raise ValueError("approval status must be HUMAN_APPROVED")
+        if self.mode not in ("full", "simple") or not self.approver.strip():
+            raise ValueError("valid mode and named human approver are required")
+        if self.generation < 1:
+            raise ValueError("approval generation must be positive")
+        _utc(self.approved_at, "approved_at")
+        _digest(self.report_sha256, "report_sha256")
+        _digest(self.candidate_manifest_sha256, "candidate_manifest_sha256")
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            **asdict(self),
+            "approved_at": _utc(self.approved_at, "approved_at").isoformat(),
+            "autonomous_approval": False,
+        }
+
+
+def approve_promotion(
+    report: RacingPromotionReport,
+    candidate: RacingRsiCandidate,
+    *,
+    approver: str,
+    approved_at: datetime,
+) -> RacingHumanApproval:
+    verify_promotion_report(report)
+    if report.status != "PROMOTION_PROPOSED":
+        raise ValueError("only PROMOTION_PROPOSED can be human approved")
+    candidate_hash = candidate_manifest_digest(candidate)
+    if (
+        report.mode != candidate.mode
+        or report.candidate_id != candidate.candidate_id
+        or report.generation != candidate.generation
+        or report.candidate_manifest_sha256 != candidate_hash
+    ):
+        raise ValueError("approval candidate does not match promotion report")
+    return RacingHumanApproval(
+        status="HUMAN_APPROVED",
+        mode=candidate.mode,
+        candidate_id=candidate.candidate_id,
+        generation=candidate.generation,
+        approver=approver,
+        approved_at=approved_at,
+        report_sha256=report.report_sha256,
+        candidate_manifest_sha256=candidate_hash,
+    )
+
+
+def approved_parameters(
+    candidate: RacingRsiCandidate,
+    report: RacingPromotionReport,
+    approval: RacingHumanApproval,
+) -> dict[str, object]:
+    """The only supported boundary for loading an RSI candidate into service."""
+    verify_promotion_report(report)
+    candidate_hash = candidate_manifest_digest(candidate)
+    if report.status != "PROMOTION_PROPOSED" or approval.status != "HUMAN_APPROVED":
+        raise ValueError("candidate has not completed controlled promotion")
+    expected = (
+        candidate.mode,
+        candidate.candidate_id,
+        candidate.generation,
+        report.report_sha256,
+        candidate_hash,
+    )
+    actual = (
+        approval.mode,
+        approval.candidate_id,
+        approval.generation,
+        approval.report_sha256,
+        approval.candidate_manifest_sha256,
+    )
+    report_identity = (report.mode, report.candidate_id, report.generation)
+    candidate_identity = (candidate.mode, candidate.candidate_id, candidate.generation)
+    if (
+        actual != expected
+        or report_identity != candidate_identity
+        or report.candidate_manifest_sha256 != candidate_hash
+    ):
+        raise ValueError("approval chain does not match candidate and report")
+    return dict(candidate.parameters)
 
 
 class RacingRecursiveImprovementGate:
@@ -300,27 +441,7 @@ class RacingRecursiveImprovementGate:
             "mode_isolated": True,
         }
         status = "PROMOTION_PROPOSED" if all(gates.values()) else "REJECTED"
-        unsigned = {
-            "version": RECURSIVE_SELF_IMPROVEMENT_VERSION,
-            "status": status,
-            "mode": self.mode,
-            "candidate_id": candidate.candidate_id,
-            "generation": candidate.generation,
-            "evaluated_races": len(rows),
-            "baseline_mean_brier_loss": baseline_loss,
-            "candidate_mean_brier_loss": candidate_loss,
-            "loss_improvement": improvement,
-            "baseline_top3_hits": baseline_top3,
-            "candidate_top3_hits": candidate_top3,
-            "baseline_mean_recovery_rate": baseline_recovery,
-            "candidate_mean_recovery_rate": candidate_recovery,
-            "baseline_max_bug_hits": baseline_bug,
-            "candidate_max_bug_hits": candidate_bug,
-            "gates": gates,
-            "candidate_manifest_sha256": sealed_candidate_hash,
-        }
-        report_hash = sha256(_canonical(unsigned)).hexdigest()
-        return RacingPromotionReport(
+        provisional = RacingPromotionReport(
             status=status,
             mode=self.mode,
             candidate_id=candidate.candidate_id,
@@ -336,11 +457,19 @@ class RacingRecursiveImprovementGate:
             baseline_max_bug_hits=baseline_bug,
             candidate_max_bug_hits=candidate_bug,
             gates=gates,
-            report_sha256=report_hash,
+            candidate_manifest_sha256=sealed_candidate_hash,
+            report_sha256="0" * 64,
         )
+        report_hash = sha256(_canonical(_promotion_report_unsigned(provisional))).hexdigest()
+        return RacingPromotionReport(**{**asdict(provisional), "report_sha256": report_hash})
 
 
-def validate_successor(previous: RacingPromotionReport, candidate: RacingRsiCandidate) -> None:
+def validate_successor(
+    previous: RacingPromotionReport,
+    candidate: RacingRsiCandidate,
+    approval: RacingHumanApproval,
+) -> None:
+    verify_promotion_report(previous)
     if previous.status != "PROMOTION_PROPOSED":
         raise ValueError("a rejected generation cannot become the recursive parent")
     if candidate.mode != previous.mode:
@@ -351,6 +480,15 @@ def validate_successor(previous: RacingPromotionReport, candidate: RacingRsiCand
         raise ValueError("recursive candidate parent_version mismatch")
     if candidate.parent_report_sha256 != previous.report_sha256:
         raise ValueError("recursive candidate is not chained to the prior report")
+    if (
+        approval.status != "HUMAN_APPROVED"
+        or approval.mode != previous.mode
+        or approval.candidate_id != previous.candidate_id
+        or approval.generation != previous.generation
+        or approval.report_sha256 != previous.report_sha256
+        or approval.candidate_manifest_sha256 != previous.candidate_manifest_sha256
+    ):
+        raise ValueError("recursive successor requires matching human approval")
 
 
 def freeze_candidate(candidate: RacingRsiCandidate, path: str | Path) -> Path:
@@ -377,9 +515,19 @@ def freeze_trial(trial: RacingFrozenTrial, path: str | Path) -> Path:
 
 
 def freeze_promotion_report(report: RacingPromotionReport, path: str | Path) -> Path:
+    verify_promotion_report(report)
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
     with destination.open("x", encoding="utf-8") as handle:
         json.dump(report.to_dict(), handle, ensure_ascii=False, sort_keys=True, indent=2)
+        handle.write("\n")
+    return destination
+
+
+def freeze_human_approval(approval: RacingHumanApproval, path: str | Path) -> Path:
+    destination = Path(path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with destination.open("x", encoding="utf-8") as handle:
+        json.dump(approval.to_dict(), handle, ensure_ascii=False, sort_keys=True, indent=2)
         handle.write("\n")
     return destination

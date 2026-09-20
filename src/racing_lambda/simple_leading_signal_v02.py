@@ -135,8 +135,15 @@ class SimpleLeadingSignalLambdaV02:
         "odds_signal": 0.10,
     }
 
-    def __init__(self) -> None:
+    def __init__(self, *, rsi_weight: float = 0.0) -> None:
+        if not 0.0 <= rsi_weight <= 0.5:
+            raise ValueError("rsi_weight must be between 0 and 0.5")
+        self.rsi_weight = float(rsi_weight)
         self.adaptive_rsi_bridge: AdaptiveRsiBridge | None = None
+
+    def rsi_candidate_parameters(self) -> dict[str, object]:
+        """Parameters this prediction path can actually apply and attest."""
+        return {"rsi_weight": self.rsi_weight}
 
     def fit_rsi_bridge(
         self, observations: Sequence[RsiBridgeObservation], *, prediction_at: datetime
@@ -147,6 +154,51 @@ class SimpleLeadingSignalLambdaV02:
         return self
 
     def rank(
+        self,
+        context: SimpleRaceContext,
+        horses: Sequence[SimpleHorseFeatures],
+        realtime_rsi_signals: Sequence[SimpleRealtimeRsiSignal] | None = None,
+        *,
+        captured_at: datetime,
+        validation_loop,
+        baseline_model: "SimpleLeadingSignalLambdaV02",
+        prediction_frozen_at: datetime,
+        registered_at: datetime | None = None,
+        baseline_rsi_signals: Sequence[SimpleRealtimeRsiSignal] | None = None,
+    ):
+        """Official 簡易式先行予測λ entry point; PRE_RACE freeze is mandatory."""
+        from .controlled_rsi_validation import ControlledRsiValidationLoop
+
+        if not isinstance(validation_loop, ControlledRsiValidationLoop):
+            raise TypeError("validation_loop must be ControlledRsiValidationLoop")
+        if not isinstance(baseline_model, SimpleLeadingSignalLambdaV02):
+            raise TypeError("baseline_model must be SimpleLeadingSignalLambdaV02")
+        return validation_loop.run_simple_prediction(
+            baseline_model=baseline_model,
+            candidate_model=self,
+            context=context,
+            horses=horses,
+            baseline_rsi_signals=baseline_rsi_signals,
+            candidate_rsi_signals=realtime_rsi_signals,
+            captured_at=captured_at,
+            prediction_frozen_at=prediction_frozen_at,
+            registered_at=registered_at,
+        )
+
+    def rank_research(
+        self,
+        context: SimpleRaceContext,
+        horses: Sequence[SimpleHorseFeatures],
+        realtime_rsi_signals: Sequence[SimpleRealtimeRsiSignal] | None = None,
+        *,
+        captured_at: datetime | None = None,
+    ) -> SimplePredictionOutput:
+        """Unattested research ranking; never valid as an official prediction."""
+        return self._rank_core(
+            context, horses, realtime_rsi_signals, captured_at=captured_at
+        )
+
+    def _rank_core(
         self,
         context: SimpleRaceContext,
         horses: Sequence[SimpleHorseFeatures],
@@ -167,7 +219,7 @@ class SimpleLeadingSignalLambdaV02:
         if unknown:
             raise ValueError(f"realtime RSI contains unknown horse_ids: {sorted(unknown)}")
         bridge = self.adaptive_rsi_bridge
-        if bridge is not None:
+        if bridge is not None or self.rsi_weight > 0:
             if set(rsi_map) != set(horse_ids):
                 raise ValueError("adaptive RSI requires all runners' three-snapshot signals")
             if captured_at is None or captured_at.tzinfo is None or captured_at.utcoffset() is None:
@@ -217,6 +269,11 @@ class SimpleLeadingSignalLambdaV02:
             )
             if bridge is not None and realtime is not None and captured_at is not None:
                 overall = bridge.blend(overall, realtime.top3_probability, captured_at=captured_at)
+            elif self.rsi_weight > 0 and realtime is not None:
+                overall = (
+                    (1.0 - self.rsi_weight) * overall
+                    + self.rsi_weight * realtime.top3_probability
+                )
             scored.append(
                 SimpleScoreBreakdown(
                     horse_id=horse.horse_id,
@@ -240,7 +297,10 @@ class SimpleLeadingSignalLambdaV02:
                         round(realtime.bug_score, 8) if realtime is not None else None
                     ),
                     realtime_rsi_used=realtime is not None,
-                    adaptive_rsi_weight=(bridge.weight_ if bridge is not None else None),
+                    adaptive_rsi_weight=(
+                        bridge.weight_ if bridge is not None
+                        else self.rsi_weight if realtime is not None else None
+                    ),
                 )
             )
 

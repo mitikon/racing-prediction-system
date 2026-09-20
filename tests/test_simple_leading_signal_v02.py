@@ -120,7 +120,7 @@ def test_maximum_bug_requires_three_independent_axes():
         stakes_top5=True,
     )
     neutral = horse("3", 8, odds=2.5, class_score=0.72)
-    output = engine.rank(wet_context(), [weak, strong, neutral])
+    output = engine.rank_research(wet_context(), [weak, strong, neutral])
     weak_row = next(row for row in output.lambda_overall_final if row.horse_id == "1")
     assert not weak_row.maximum_bug_eligible
     assert weak_row.bug_type is BugType.NONE
