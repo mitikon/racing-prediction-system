@@ -96,3 +96,13 @@ ChatGPTがこのチャットで予想を行い、ユーザーが正式結果を�
 `score_jra_race_research`と`rank_research`は比較・単体研究専用で、PRE_RACE証跡を持たないため正式予測として扱いません。実戦記録に採用できるのは、正式APIが返す`ControlledPrediction`だけです。正式APIは発走前時刻、入力取得時刻、候補モード、書き込み禁止PRE_RACE保存を検査し、保存済みレースへの再出力を失敗終了します。
 
 本格先行予測λのスコアリングではタイムゾーン付き発走時刻が必須で、発走後スナップショットを常に拒否します。簡易式先行予測λは発走30分前・15分前・5分前の3時点を許容誤差付きで強制します。外部ファイルは検査済みの同一バイト列をJSON取込みへ直接渡すため、マルウェア検査後に元パスを再読込しません。
+
+## RSI再帰的自己改善の高速化（簡易式先行予測λ直結運転）
+
+`racing_lambda.recursive_runtime`は、`RacingRecursiveImprovementGate`の探索を安全性を落とさずに高速化する運転レイヤーです。`SimpleLeadingPredictionLambda`（簡易式先行予測λ）へ直結し、`register_simple_race_trials`でPRE_RACEを凍結、`settle_simple_race_result`で結果判明後にRESULTを追加します。
+
+- **並列候補探索**: `PARALLEL_CANDIDATES`（既定3）個の`rsi_weight`候補を同じレース・同じ現行版に対して同時に検証します。1候補が劣ると判明するたびに次を試すのではなく、複数の値を並行して試すことで探索を高速化します。
+- **早期棄却**: 損失改善の判定は`sequential_loss_improvement_test`によるWald SPRTです。統計的に明確に劣る候補は、`min_future_races`（既定8）レース全期間を待たず`min_early_rejection_races`（既定5）から`EARLY_REJECTED`として打ち切り、その枠を新しい候補へすぐ差し替えます。ただし`PROMOTION_PROPOSED`は必ず全期間評価を経てからのみ出し、部分的な期間での昇格提案は一切ありません。
+- **人間承認は省略しない**: `evaluate_and_rotate_candidates`は`active_model`を一切書き換えません。`PROMOTION_PROPOSED`は`PROMOTION/proposal.json`へ人間レビュー用として凍結されるだけで、正式パラメータへ反映する唯一の経路は`apply_human_approved_promotion`（`RacingHumanApproval`の記録が必須）です。自律更新は探索の高速化だけを対象とし、本格型・簡易式とも自動採用は行いません。
+
+各並列候補は`bootstrap_state("simple", ...)`で初期化し、`write_state`/`load_state`でハッシュ連鎖された状態ファイルへ永続化します。改ざんされた状態は読み込み時に拒否します。
