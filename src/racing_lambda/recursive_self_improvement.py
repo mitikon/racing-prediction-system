@@ -11,9 +11,9 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from hashlib import sha256
 import json
-from math import isfinite
+from math import isfinite, log
 from pathlib import Path
-from statistics import mean
+from statistics import mean, stdev
 from typing import Literal, Mapping, Sequence
 
 
@@ -364,15 +364,94 @@ def approved_parameters(
     return dict(candidate.parameters)
 
 
+@dataclass(frozen=True)
+class SequentialEvidence:
+    """Wald SPRT verdict on whether candidate Brier loss beats baseline.
+
+    Tests H0: true mean improvement <= 0 against H1: true mean improvement
+    >= ``min_effect``, controlling the false-promotion rate at ``alpha`` and
+    the false-rejection rate at ``beta``.  Unlike a fixed-N threshold peeked
+    at repeatedly, a Wald SPRT boundary crossing is valid evidence at
+    whatever sample size it first occurs, so this is safe to evaluate before
+    a full evaluation window has accumulated.
+    """
+
+    decision: str  # "CONTINUE" | "PROMOTE" | "REJECT"
+    races: int
+    mean_improvement: float
+    log_likelihood_ratio: float
+    upper_boundary: float
+    lower_boundary: float
+
+
+def sequential_loss_improvement_test(
+    baseline_losses: Sequence[float],
+    candidate_losses: Sequence[float],
+    *,
+    min_effect: float = 0.001,
+    alpha: float = 0.05,
+    beta: float = 0.10,
+) -> SequentialEvidence:
+    if len(baseline_losses) != len(candidate_losses):
+        raise ValueError("baseline and candidate loss series must be paired")
+    if not baseline_losses:
+        raise ValueError("at least one paired observation is required")
+    if min_effect <= 0:
+        raise ValueError("min_effect must be positive")
+    if not 0.0 < alpha < 0.5 or not 0.0 < beta < 0.5:
+        raise ValueError("alpha and beta must be in (0, 0.5)")
+
+    races = len(baseline_losses)
+    diffs = [float(b) - float(c) for b, c in zip(baseline_losses, candidate_losses)]
+    upper = log((1.0 - beta) / alpha)
+    lower = log(beta / (1.0 - alpha))
+    mean_diff = mean(diffs)
+    if races < 2:
+        return SequentialEvidence("CONTINUE", races, mean_diff, 0.0, upper, lower)
+
+    spread = stdev(diffs)
+    if spread <= 1e-12:
+        # Every race agrees exactly: there is no noise to test against, so
+        # decide from the sign of the (unanimous) improvement directly.
+        if mean_diff >= min_effect:
+            return SequentialEvidence("PROMOTE", races, mean_diff, float("inf"), upper, lower)
+        if mean_diff <= 0.0:
+            return SequentialEvidence("REJECT", races, mean_diff, float("-inf"), upper, lower)
+        return SequentialEvidence("CONTINUE", races, mean_diff, 0.0, upper, lower)
+
+    variance = spread * spread
+    mu0, mu1 = 0.0, min_effect
+    llr = sum((mu1 - mu0) * (2.0 * d - mu0 - mu1) for d in diffs) / (2.0 * variance)
+    if llr >= upper:
+        decision = "PROMOTE"
+    elif llr <= lower:
+        decision = "REJECT"
+    else:
+        decision = "CONTINUE"
+    return SequentialEvidence(decision, races, mean_diff, llr, upper, lower)
+
+
 class RacingRecursiveImprovementGate:
     """Keep full/simple generations separate and test only genuinely future races."""
 
-    def __init__(self, mode: Mode, *, min_future_races: int = 8, min_loss_improvement: float = 0.001) -> None:
-        if mode not in ("full", "simple") or min_future_races < 8 or min_loss_improvement < 0:
+    def __init__(
+        self,
+        mode: Mode,
+        *,
+        min_future_races: int = 8,
+        min_loss_improvement: float = 0.001,
+        false_promotion_rate: float = 0.05,
+        false_rejection_rate: float = 0.10,
+    ) -> None:
+        if mode not in ("full", "simple") or min_future_races < 8 or min_loss_improvement <= 0:
+            raise ValueError("unsafe racing recursive-improvement gate configuration")
+        if not 0.0 < false_promotion_rate < 0.5 or not 0.0 < false_rejection_rate < 0.5:
             raise ValueError("unsafe racing recursive-improvement gate configuration")
         self.mode = mode
         self.min_future_races = int(min_future_races)
         self.min_loss_improvement = float(min_loss_improvement)
+        self.false_promotion_rate = float(false_promotion_rate)
+        self.false_rejection_rate = float(false_rejection_rate)
 
     def evaluate(
         self,
@@ -429,11 +508,23 @@ class RacingRecursiveImprovementGate:
         baseline_bug = sum(row.baseline_max_bug_hit for row in rows)
         candidate_bug = sum(row.candidate_max_bug_hit for row in rows)
         improvement = baseline_loss - candidate_loss
+        loss_evidence = sequential_loss_improvement_test(
+            [row.baseline_brier_loss for row in rows],
+            [row.candidate_brier_loss for row in rows],
+            min_effect=self.min_loss_improvement,
+            alpha=self.false_promotion_rate,
+            beta=self.false_rejection_rate,
+        )
         gates = {
             "sealed_before_future_predictions": True,
             "pre_race_trial_attested": True,
             "minimum_future_races": True,
-            "brier_loss_improved": improvement >= self.min_loss_improvement,
+            # A Wald SPRT verdict on the paired per-race Brier-loss
+            # difference, not a flat mean-improvement threshold: it controls
+            # the false-promotion rate explicitly (self.false_promotion_rate)
+            # instead of accepting any improvement above an arbitrary bar
+            # regardless of race-to-race noise.
+            "brier_loss_improved": loss_evidence.decision == "PROMOTE",
             "top3_extraction_not_worse": candidate_top3 >= baseline_top3,
             "recovery_rate_not_worse": candidate_recovery >= baseline_recovery,
             "maximum_bug_detection_not_worse": candidate_bug >= baseline_bug,
