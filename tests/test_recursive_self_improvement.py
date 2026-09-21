@@ -13,6 +13,7 @@ from racing_lambda import (
     freeze_recursive_rsi_report,
     freeze_recursive_rsi_trial,
     parameter_manifest_digest,
+    sequential_loss_improvement_test,
     trial_manifest_digest,
     validate_recursive_rsi_successor,
     approve_promotion,
@@ -193,3 +194,77 @@ def test_rejected_candidate_cannot_be_human_approved():
     )
     with pytest.raises(ValueError, match="only PROMOTION_PROPOSED"):
         approve_promotion(report, item, approver="human-reviewer", approved_at=CREATED + timedelta(days=20))
+
+
+def test_sequential_test_promotes_on_strong_consistent_improvement():
+    baseline = [0.20, 0.19, 0.21, 0.20, 0.18, 0.22, 0.20, 0.19, 0.21, 0.20]
+    candidate_losses = [0.15, 0.16, 0.14, 0.15, 0.17, 0.13, 0.15, 0.16, 0.14, 0.15]
+    evidence = sequential_loss_improvement_test(baseline, candidate_losses, min_effect=0.01)
+    assert evidence.decision == "PROMOTE"
+    assert evidence.races == 10
+    assert evidence.mean_improvement == pytest.approx(0.05, abs=1e-9)
+    assert evidence.log_likelihood_ratio >= evidence.upper_boundary
+
+
+def test_sequential_test_rejects_on_strong_consistent_regression():
+    baseline = [0.15, 0.16, 0.14, 0.15, 0.17, 0.13, 0.15, 0.16, 0.14, 0.15]
+    candidate_losses = [0.20, 0.19, 0.21, 0.20, 0.18, 0.22, 0.20, 0.19, 0.21, 0.20]
+    evidence = sequential_loss_improvement_test(baseline, candidate_losses, min_effect=0.01)
+    assert evidence.decision == "REJECT"
+    assert evidence.log_likelihood_ratio <= evidence.lower_boundary
+
+
+def test_sequential_test_continues_when_evidence_is_ambiguous():
+    baseline = [0.20, 0.18, 0.21, 0.19, 0.20]
+    candidate_losses = [0.19, 0.21, 0.18, 0.20, 0.195]
+    evidence = sequential_loss_improvement_test(baseline, candidate_losses)
+    assert evidence.decision == "CONTINUE"
+    assert evidence.lower_boundary < evidence.log_likelihood_ratio < evidence.upper_boundary
+
+
+def test_sequential_test_zero_variance_shortcuts_to_a_decision():
+    promote = sequential_loss_improvement_test([0.20, 0.20, 0.20], [0.15, 0.15, 0.15])
+    assert promote.decision == "PROMOTE"
+    reject = sequential_loss_improvement_test([0.15, 0.15, 0.15], [0.20, 0.20, 0.20])
+    assert reject.decision == "REJECT"
+    tiny_but_positive = sequential_loss_improvement_test([0.1005, 0.1005], [0.1000, 0.1000])
+    assert tiny_but_positive.decision == "CONTINUE"
+
+
+def test_sequential_test_rejects_invalid_configuration():
+    with pytest.raises(ValueError, match="must be paired"):
+        sequential_loss_improvement_test([0.1, 0.2], [0.1])
+    with pytest.raises(ValueError, match="at least one"):
+        sequential_loss_improvement_test([], [])
+    with pytest.raises(ValueError, match="min_effect must be positive"):
+        sequential_loss_improvement_test([0.1], [0.2], min_effect=0.0)
+    with pytest.raises(ValueError, match="alpha and beta"):
+        sequential_loss_improvement_test([0.1], [0.2], alpha=0.6)
+    with pytest.raises(ValueError, match="alpha and beta"):
+        sequential_loss_improvement_test([0.1], [0.2], beta=0.0)
+
+
+def test_gate_uses_sequential_evidence_instead_of_flat_threshold():
+    # Mean improvement (0.00105) clears the old flat threshold (>= 0.001),
+    # but the per-race noise (std ~0.015) is large relative to that tiny
+    # margin: a properly calibrated SPRT recognizes this as inconclusive
+    # evidence (log-likelihood ratio well inside the accept/reject
+    # boundaries) rather than promoting on what is statistically noise.
+    diffs = [0.02, -0.015, 0.012, -0.018, 0.016, -0.011, 0.019, -0.014]
+    rows = observations()
+    tampered = [
+        RacingFutureEvaluation(
+            **{**row.__dict__, "baseline_brier_loss": 0.20, "candidate_brier_loss": 0.20 - diff}
+        )
+        for row, diff in zip(rows, diffs)
+    ]
+    evidence = sequential_loss_improvement_test(
+        [row.baseline_brier_loss for row in tampered],
+        [row.candidate_brier_loss for row in tampered],
+    )
+    assert evidence.decision == "CONTINUE"
+    assert evidence.mean_improvement >= 0.001  # would have cleared the old flat threshold
+
+    report = RacingRecursiveImprovementGate("full").evaluate(candidate(), tampered, trial_rows())
+    assert report.status == "REJECTED"
+    assert not report.gates["brier_loss_improved"]
