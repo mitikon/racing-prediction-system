@@ -1,0 +1,503 @@
+{
+  "schema": "simple-published-outcome-audit-v1",
+  "model": "簡易式先行予測λ",
+  "freeze_policy": "PRE_RACE順位は不変。RESULTは別記録で、次レース以降にのみ利用する",
+  "races": [
+    {
+      "race_id": "2026-09-20-nakayama-6",
+      "published_depth": 5,
+      "winner_rank": 5,
+      "winner_classification": "winner_ranking_error",
+      "top3_hits": 2,
+      "published_podium_hits": 3,
+      "published_podium_complete": true,
+      "overrated_top3": [
+        "9"
+      ],
+      "odds_bug_podium_hits": [
+        "7"
+      ],
+      "manual_formation_recovered": false
+    },
+    {
+      "race_id": "2026-09-20-nakayama-9",
+      "published_depth": 5,
+      "winner_rank": 5,
+      "winner_classification": "winner_ranking_error",
+      "top3_hits": 2,
+      "published_podium_hits": 3,
+      "published_podium_complete": true,
+      "overrated_top3": [
+        "9"
+      ],
+      "odds_bug_podium_hits": [],
+      "manual_formation_recovered": false
+    },
+    {
+      "race_id": "2026-09-20-hanshin-10",
+      "published_depth": 3,
+      "winner_rank": 3,
+      "winner_classification": "winner_ranking_error",
+      "top3_hits": 2,
+      "published_podium_hits": 2,
+      "published_podium_complete": false,
+      "overrated_top3": [
+        "3"
+      ],
+      "odds_bug_podium_hits": [],
+      "manual_formation_recovered": false
+    },
+    {
+      "race_id": "2026-09-20-nakayama-10",
+      "published_depth": 5,
+      "winner_rank": null,
+      "winner_classification": "winner_extraction_omission",
+      "top3_hits": 2,
+      "published_podium_hits": 2,
+      "published_podium_complete": false,
+      "overrated_top3": [
+        "1"
+      ],
+      "odds_bug_podium_hits": [],
+      "manual_formation_recovered": false
+    },
+    {
+      "race_id": "2026-09-20-hanshin-11",
+      "published_depth": 5,
+      "winner_rank": 1,
+      "winner_classification": "winner_exact",
+      "top3_hits": 2,
+      "published_podium_hits": 2,
+      "published_podium_complete": false,
+      "overrated_top3": [
+        "12"
+      ],
+      "odds_bug_podium_hits": [],
+      "manual_formation_recovered": true
+    },
+    {
+      "race_id": "2026-09-20-nakayama-11",
+      "published_depth": 5,
+      "winner_rank": null,
+      "winner_classification": "winner_extraction_omission",
+      "top3_hits": 0,
+      "published_podium_hits": 1,
+      "published_podium_complete": false,
+      "overrated_top3": [
+        "7",
+        "9",
+        "6"
+      ],
+      "odds_bug_podium_hits": [
+        "1",
+        "4"
+      ],
+      "manual_formation_recovered": false
+    },
+    {
+      "race_id": "2026-09-20-hanshin-12",
+      "published_depth": 5,
+      "winner_rank": 1,
+      "winner_classification": "winner_exact",
+      "top3_hits": 2,
+      "published_podium_hits": 2,
+      "published_podium_complete": false,
+      "overrated_top3": [
+        "8"
+      ],
+      "odds_bug_podium_hits": [
+        "5"
+      ],
+      "manual_formation_recovered": false
+    },
+    {
+      "race_id": "2026-09-20-nakayama-12",
+      "published_depth": 5,
+      "winner_rank": null,
+      "winner_classification": "winner_extraction_omission",
+      "top3_hits": 1,
+      "published_podium_hits": 1,
+      "published_podium_complete": false,
+      "overrated_top3": [
+        "12",
+        "6"
+      ],
+      "odds_bug_podium_hits": [
+        "13",
+        "1"
+      ],
+      "manual_formation_recovered": false
+    }
+  ],
+  "total": {
+    "race_count": 8,
+    "winner_rank1": 2,
+    "winner_in_published": 5,
+    "winner_extraction_omissions": 3,
+    "top3_hits": 13,
+    "published_podium_hits": 16,
+    "published_podium_complete_races": 2
+  },
+  "excluded_podium_horses": [
+    {
+      "race_id": "2026-09-20-hanshin-10",
+      "horse_id": "2",
+      "actual_place": 3,
+      "frozen_rank": null,
+      "category": "published_ranking_exclusion",
+      "pre_race_observation": null,
+      "post_race_observation": null,
+      "cause_status": "unverified"
+    },
+    {
+      "race_id": "2026-09-20-nakayama-10",
+      "horse_id": "10",
+      "actual_place": 1,
+      "frozen_rank": null,
+      "category": "published_ranking_exclusion",
+      "pre_race_observation": null,
+      "post_race_observation": null,
+      "cause_status": "unverified"
+    },
+    {
+      "race_id": "2026-09-20-hanshin-11",
+      "horse_id": "3",
+      "actual_place": 2,
+      "frozen_rank": null,
+      "category": "published_ranking_exclusion",
+      "pre_race_observation": null,
+      "post_race_observation": null,
+      "cause_status": "unverified"
+    },
+    {
+      "race_id": "2026-09-20-nakayama-11",
+      "horse_id": "8",
+      "actual_place": 1,
+      "frozen_rank": null,
+      "category": "published_ranking_exclusion",
+      "pre_race_observation": null,
+      "post_race_observation": null,
+      "cause_status": "unverified"
+    },
+    {
+      "race_id": "2026-09-20-nakayama-11",
+      "horse_id": "1",
+      "actual_place": 2,
+      "frozen_rank": null,
+      "category": "published_ranking_exclusion",
+      "pre_race_observation": null,
+      "post_race_observation": null,
+      "cause_status": "unverified"
+    },
+    {
+      "race_id": "2026-09-20-hanshin-12",
+      "horse_id": "5",
+      "actual_place": 2,
+      "frozen_rank": null,
+      "category": "published_ranking_exclusion",
+      "pre_race_observation": null,
+      "post_race_observation": null,
+      "cause_status": "unverified"
+    },
+    {
+      "race_id": "2026-09-20-nakayama-12",
+      "horse_id": "11",
+      "actual_place": 1,
+      "frozen_rank": null,
+      "category": "published_ranking_exclusion",
+      "pre_race_observation": null,
+      "post_race_observation": null,
+      "cause_status": "unverified"
+    },
+    {
+      "race_id": "2026-09-20-nakayama-12",
+      "horse_id": "13",
+      "actual_place": 2,
+      "frozen_rank": null,
+      "category": "published_ranking_exclusion",
+      "pre_race_observation": null,
+      "post_race_observation": null,
+      "cause_status": "unverified"
+    }
+  ],
+  "next_race_training_labels": [
+    {
+      "race_id": "2026-09-20-nakayama-6",
+      "horse_id": "9",
+      "frozen_rank": 1,
+      "top3_result_label": 0,
+      "scope": "published_horses_only"
+    },
+    {
+      "race_id": "2026-09-20-nakayama-6",
+      "horse_id": "2",
+      "frozen_rank": 2,
+      "top3_result_label": 1,
+      "scope": "published_horses_only"
+    },
+    {
+      "race_id": "2026-09-20-nakayama-6",
+      "horse_id": "7",
+      "frozen_rank": 3,
+      "top3_result_label": 1,
+      "scope": "published_horses_only"
+    },
+    {
+      "race_id": "2026-09-20-nakayama-6",
+      "horse_id": "1",
+      "frozen_rank": 4,
+      "top3_result_label": 0,
+      "scope": "published_horses_only"
+    },
+    {
+      "race_id": "2026-09-20-nakayama-6",
+      "horse_id": "8",
+      "frozen_rank": 5,
+      "top3_result_label": 1,
+      "scope": "published_horses_only"
+    },
+    {
+      "race_id": "2026-09-20-nakayama-9",
+      "horse_id": "3",
+      "frozen_rank": 1,
+      "top3_result_label": 1,
+      "scope": "published_horses_only"
+    },
+    {
+      "race_id": "2026-09-20-nakayama-9",
+      "horse_id": "10",
+      "frozen_rank": 2,
+      "top3_result_label": 1,
+      "scope": "published_horses_only"
+    },
+    {
+      "race_id": "2026-09-20-nakayama-9",
+      "horse_id": "9",
+      "frozen_rank": 3,
+      "top3_result_label": 0,
+      "scope": "published_horses_only"
+    },
+    {
+      "race_id": "2026-09-20-nakayama-9",
+      "horse_id": "5",
+      "frozen_rank": 4,
+      "top3_result_label": 0,
+      "scope": "published_horses_only"
+    },
+    {
+      "race_id": "2026-09-20-nakayama-9",
+      "horse_id": "8",
+      "frozen_rank": 5,
+      "top3_result_label": 1,
+      "scope": "published_horses_only"
+    },
+    {
+      "race_id": "2026-09-20-hanshin-10",
+      "horse_id": "3",
+      "frozen_rank": 1,
+      "top3_result_label": 0,
+      "scope": "published_horses_only"
+    },
+    {
+      "race_id": "2026-09-20-hanshin-10",
+      "horse_id": "5",
+      "frozen_rank": 2,
+      "top3_result_label": 1,
+      "scope": "published_horses_only"
+    },
+    {
+      "race_id": "2026-09-20-hanshin-10",
+      "horse_id": "12",
+      "frozen_rank": 3,
+      "top3_result_label": 1,
+      "scope": "published_horses_only"
+    },
+    {
+      "race_id": "2026-09-20-nakayama-10",
+      "horse_id": "8",
+      "frozen_rank": 1,
+      "top3_result_label": 1,
+      "scope": "published_horses_only"
+    },
+    {
+      "race_id": "2026-09-20-nakayama-10",
+      "horse_id": "15",
+      "frozen_rank": 2,
+      "top3_result_label": 1,
+      "scope": "published_horses_only"
+    },
+    {
+      "race_id": "2026-09-20-nakayama-10",
+      "horse_id": "1",
+      "frozen_rank": 3,
+      "top3_result_label": 0,
+      "scope": "published_horses_only"
+    },
+    {
+      "race_id": "2026-09-20-nakayama-10",
+      "horse_id": "2",
+      "frozen_rank": 4,
+      "top3_result_label": 0,
+      "scope": "published_horses_only"
+    },
+    {
+      "race_id": "2026-09-20-nakayama-10",
+      "horse_id": "9",
+      "frozen_rank": 5,
+      "top3_result_label": 0,
+      "scope": "published_horses_only"
+    },
+    {
+      "race_id": "2026-09-20-hanshin-11",
+      "horse_id": "4",
+      "frozen_rank": 1,
+      "top3_result_label": 1,
+      "scope": "published_horses_only"
+    },
+    {
+      "race_id": "2026-09-20-hanshin-11",
+      "horse_id": "12",
+      "frozen_rank": 2,
+      "top3_result_label": 0,
+      "scope": "published_horses_only"
+    },
+    {
+      "race_id": "2026-09-20-hanshin-11",
+      "horse_id": "2",
+      "frozen_rank": 3,
+      "top3_result_label": 1,
+      "scope": "published_horses_only"
+    },
+    {
+      "race_id": "2026-09-20-hanshin-11",
+      "horse_id": "9",
+      "frozen_rank": 4,
+      "top3_result_label": 0,
+      "scope": "published_horses_only"
+    },
+    {
+      "race_id": "2026-09-20-hanshin-11",
+      "horse_id": "15",
+      "frozen_rank": 5,
+      "top3_result_label": 0,
+      "scope": "published_horses_only"
+    },
+    {
+      "race_id": "2026-09-20-nakayama-11",
+      "horse_id": "7",
+      "frozen_rank": 1,
+      "top3_result_label": 0,
+      "scope": "published_horses_only"
+    },
+    {
+      "race_id": "2026-09-20-nakayama-11",
+      "horse_id": "9",
+      "frozen_rank": 2,
+      "top3_result_label": 0,
+      "scope": "published_horses_only"
+    },
+    {
+      "race_id": "2026-09-20-nakayama-11",
+      "horse_id": "6",
+      "frozen_rank": 3,
+      "top3_result_label": 0,
+      "scope": "published_horses_only"
+    },
+    {
+      "race_id": "2026-09-20-nakayama-11",
+      "horse_id": "4",
+      "frozen_rank": 4,
+      "top3_result_label": 1,
+      "scope": "published_horses_only"
+    },
+    {
+      "race_id": "2026-09-20-nakayama-11",
+      "horse_id": "12",
+      "frozen_rank": 5,
+      "top3_result_label": 0,
+      "scope": "published_horses_only"
+    },
+    {
+      "race_id": "2026-09-20-hanshin-12",
+      "horse_id": "3",
+      "frozen_rank": 1,
+      "top3_result_label": 1,
+      "scope": "published_horses_only"
+    },
+    {
+      "race_id": "2026-09-20-hanshin-12",
+      "horse_id": "1",
+      "frozen_rank": 2,
+      "top3_result_label": 1,
+      "scope": "published_horses_only"
+    },
+    {
+      "race_id": "2026-09-20-hanshin-12",
+      "horse_id": "8",
+      "frozen_rank": 3,
+      "top3_result_label": 0,
+      "scope": "published_horses_only"
+    },
+    {
+      "race_id": "2026-09-20-hanshin-12",
+      "horse_id": "15",
+      "frozen_rank": 4,
+      "top3_result_label": 0,
+      "scope": "published_horses_only"
+    },
+    {
+      "race_id": "2026-09-20-hanshin-12",
+      "horse_id": "2",
+      "frozen_rank": 5,
+      "top3_result_label": 0,
+      "scope": "published_horses_only"
+    },
+    {
+      "race_id": "2026-09-20-nakayama-12",
+      "horse_id": "12",
+      "frozen_rank": 1,
+      "top3_result_label": 0,
+      "scope": "published_horses_only"
+    },
+    {
+      "race_id": "2026-09-20-nakayama-12",
+      "horse_id": "6",
+      "frozen_rank": 2,
+      "top3_result_label": 0,
+      "scope": "published_horses_only"
+    },
+    {
+      "race_id": "2026-09-20-nakayama-12",
+      "horse_id": "1",
+      "frozen_rank": 3,
+      "top3_result_label": 1,
+      "scope": "published_horses_only"
+    },
+    {
+      "race_id": "2026-09-20-nakayama-12",
+      "horse_id": "16",
+      "frozen_rank": 4,
+      "top3_result_label": 0,
+      "scope": "published_horses_only"
+    },
+    {
+      "race_id": "2026-09-20-nakayama-12",
+      "horse_id": "5",
+      "frozen_rank": 5,
+      "top3_result_label": 0,
+      "scope": "published_horses_only"
+    }
+  ],
+  "learning_evidence": {
+    "accepted": true,
+    "effective_from": "next_race_only",
+    "scope": "published_horses_and_podium_exclusions"
+  },
+  "rsi_training": {
+    "performed": false,
+    "reason": "全馬の定量特徴量と30/15/5分の3時点オッズが保存されていない",
+    "next_step": "同形式のPRE_RACE特徴量を8レース以上固定し、後続レースで候補を比較する"
+  },
+  "promotion_status": "NOT_EVALUABLE",
+  "weight_changes": []
+}

@@ -1,0 +1,90 @@
+{
+  "schema": "pre_race_prediction_v1",
+  "model": "簡易式先行予測λ",
+  "race_id": "2026-09-21-hanshin-09",
+  "race_name": "新涼特別",
+  "surface": "dirt",
+  "distance_m": 1400,
+  "going": "稍重",
+  "field_size": 16,
+  "post_time_jst": "2026-09-21T14:25:00+09:00",
+  "frozen_at_jst": "2026-09-21T14:11:50+09:00",
+  "odds_observed_at_jst": "2026-09-21T14:00:00+09:00",
+  "odds_source": "JRA-VAN screenshots supplied by user",
+  "prediction_kind": "manual_simple_leading_lambda_from_single_odds_snapshot",
+  "git_commit": "785c65574e2cd7e33ec232231d0905c546110535",
+  "source_sha256": {
+    "IMG_6694.png": "381fa9febc2fd652c251a24dbccb42f18a653e70ce70d2267234429b125f49d9",
+    "IMG_6695.png": "13627da1dceb3bbeb99eaf001d4c49132444228dc5d60048a5acccb6b272f7d0",
+    "IMG_6696.png": "2f202dc4f1824d9bebbacb7904e978085992d3cecf3269214dd2e06917c379c6"
+  },
+  "odds_by_horse_number": {
+    "1": 97.2,
+    "2": 16.0,
+    "3": 3.5,
+    "4": 14.7,
+    "5": 93.3,
+    "6": 12.7,
+    "7": 80.0,
+    "8": 24.2,
+    "9": 44.8,
+    "10": 67.4,
+    "11": 52.2,
+    "12": 3.5,
+    "13": 12.4,
+    "14": 8.2,
+    "15": 29.2,
+    "16": 9.0
+  },
+  "lambda_overall_order": [
+    "12",
+    "3",
+    "13",
+    "2",
+    "4",
+    "14",
+    "16",
+    "9",
+    "6",
+    "8",
+    "11",
+    "1",
+    "10",
+    "15",
+    "7",
+    "5"
+  ],
+  "top5": ["12", "3", "13", "2", "4"],
+  "axis_candidates": ["12", "3", "13"],
+  "odds_distortion_candidates": [
+    {
+      "horse_number": "13",
+      "classification": "win_and_place_undervalued",
+      "reason": "東京ダ1400mの勝ち実績と近走内容に対して単勝12.4倍"
+    },
+    {
+      "horse_number": "2",
+      "classification": "place_undervalued",
+      "reason": "中京ダ1400mの近走3着に対して単勝16.0倍"
+    },
+    {
+      "horse_number": "4",
+      "classification": "place_undervalued",
+      "reason": "中京ダ1400mの近走4着に対して単勝14.7倍"
+    },
+    {
+      "horse_number": "9",
+      "classification": "longshot_watch",
+      "reason": "先行経験と稍重の前残り余地に対して単勝44.8倍"
+    }
+  ],
+  "maximum_bug_certified": null,
+  "overvaluation_watch": ["14", "16"],
+  "rsi_training_eligible": false,
+  "notes": [
+    "RESULT情報は不使用。予測順位は正式結果判明後も変更しない。",
+    "稍重ダ1400mとして先行持続力、同距離実績、近走位置取り、馬場適性を優先した。",
+    "30分前・15分前・5分前の3時点オッズが未取得のためRSI係数更新と最大バグ認定は行わない。",
+    "これは画像入力による手動簡易評価で、全馬の定量特徴量をコードへ投入した推論ではない。"
+  ]
+}
