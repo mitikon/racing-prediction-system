@@ -106,6 +106,16 @@ def test_state_is_hash_chained_and_tampering_is_rejected(tmp_path):
         load_state(first)
 
 
+def test_bootstrap_seeds_distinct_parameters_across_parallel_slots():
+    # simple mode's mutation schedule has only one tunable dimension
+    # (rsi_weight), so without de-duplication against sibling slots two of
+    # the three parallel candidates would test the same value and waste a
+    # search slot.
+    state = bootstrap_state("simple", {"rsi_weight": 0.0}, COMMIT, CREATED)
+    values = [slot["candidate"]["parameters"]["rsi_weight"] for slot in state["candidate_slots"]]
+    assert len(set(values)) == len(values) == PARALLEL_CANDIDATES
+
+
 def test_ensure_candidate_slots_tops_up_without_disturbing_existing_slots():
     state = bootstrap_state("simple", {"rsi_weight": 0.0}, COMMIT, CREATED, parallel_candidates=1)
     assert len(state["candidate_slots"]) == 1
@@ -144,6 +154,9 @@ def test_parallel_candidates_are_evaluated_independently_after_full_window(tmp_p
 
     assert (tmp_path / "simple" / starting_ids[0] / "PROMOTION" / "proposal.json").exists()
     assert (tmp_path / "simple" / starting_ids[1] / "PROMOTION" / "proposal.json").exists()
+
+    reseeded_values = [slot["candidate"]["parameters"]["rsi_weight"] for slot in state["candidate_slots"]]
+    assert len(set(reseeded_values)) == len(reseeded_values)
 
 
 def test_clearly_worse_candidate_is_abandoned_before_the_full_window(tmp_path):

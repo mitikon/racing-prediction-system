@@ -140,30 +140,41 @@ def _evaluation_from_payload(payload: Mapping[str, object]) -> RacingFutureEvalu
     )
 
 
-def _next_parameters(mode: Mode, active: Mapping[str, object], attempt: int) -> dict[str, object]:
+def _next_parameters(
+    mode: Mode,
+    active: Mapping[str, object],
+    attempt: int,
+    *,
+    avoid: Sequence[Mapping[str, object]] = (),
+) -> dict[str, object]:
     schedule = MUTATION_SCHEDULES[mode]
     search_size = 1
     for _, choices in schedule:
         search_size *= len(choices)
+    taken = [dict(item) for item in avoid]
     for offset in range(search_size):
         cursor = (attempt + offset) % search_size
         parameters = deepcopy(dict(active))
         for name, choices in schedule:
             parameters[name] = deepcopy(choices[cursor % len(choices)])
             cursor //= len(choices)
-        if parameters != dict(active):
+        if parameters != dict(active) and parameters not in taken:
             return parameters
     raise RuntimeError(f"recursive RSI search space contains no alternative configuration for mode={mode}")
 
 
 def _new_candidate(
-    state: Mapping[str, object], source_commit: str, created_at: datetime
+    state: Mapping[str, object],
+    source_commit: str,
+    created_at: datetime,
+    *,
+    avoid: Sequence[Mapping[str, object]] = (),
 ) -> RacingRsiCandidate:
     mode = str(state["mode"])
     active = dict(state["active_model"])
     attempt = int(state.get("attempt", 0)) + 1
     generation = int(active["generation"]) + 1
-    parameters = _next_parameters(mode, dict(active["parameters"]), attempt)
+    parameters = _next_parameters(mode, dict(active["parameters"]), attempt, avoid=avoid)
     return RacingRsiCandidate(
         mode=mode,
         candidate_id=f"{mode}-rsi-g{generation}-a{attempt}",
@@ -188,8 +199,14 @@ def _new_slot(candidate: RacingRsiCandidate, attempt: int) -> dict[str, object]:
     }
 
 
-def _seed_slot(state: dict[str, object], source_commit: str, created_at: datetime) -> dict[str, object]:
-    candidate = _new_candidate(state, source_commit, created_at)
+def _seed_slot(
+    state: dict[str, object],
+    source_commit: str,
+    created_at: datetime,
+    *,
+    avoid: Sequence[Mapping[str, object]] = (),
+) -> dict[str, object]:
+    candidate = _new_candidate(state, source_commit, created_at, avoid=avoid)
     state["attempt"] = int(state.get("attempt", 0)) + 1
     return _new_slot(candidate, state["attempt"])
 
@@ -201,11 +218,23 @@ def ensure_candidate_slots(
     *,
     parallel_candidates: int = PARALLEL_CANDIDATES,
 ) -> None:
-    """Top up the candidate pool to ``parallel_candidates`` concurrent slots."""
+    """Top up the candidate pool to ``parallel_candidates`` concurrent slots.
+
+    Newly seeded slots avoid duplicating any parameter set already held by
+    another live slot, so parallel exploration actually covers distinct
+    configurations instead of wasting a slot re-testing a sibling's value
+    (a real risk here since, unlike the market runtime, this mode's mutation
+    schedule has only one tunable dimension: ``rsi_weight``).
+    """
     slots = state.setdefault("candidate_slots", [])
     created = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    live_parameters = [dict(slot["candidate"]["parameters"]) for slot in slots]
     while len(slots) < parallel_candidates:
-        slots.append(_seed_slot(state, source_commit, created - timedelta(microseconds=1)))
+        slot = _seed_slot(
+            state, source_commit, created - timedelta(microseconds=1), avoid=live_parameters
+        )
+        live_parameters.append(dict(slot["candidate"]["parameters"]))
+        slots.append(slot)
 
 
 def bootstrap_state(
@@ -445,11 +474,23 @@ def evaluate_and_rotate_candidates(
         return []
 
     created = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    concluded_indexes = {conclusion["index"] for conclusion in conclusions}
+    # Reseeded slots avoid duplicating any parameter set still held by a
+    # slot that did *not* conclude this round, so a full parallel batch of
+    # replacements still explores distinct configurations.
+    live_parameters = [
+        dict(slot["candidate"]["parameters"])
+        for index, slot in enumerate(state["candidate_slots"])
+        if index not in concluded_indexes
+    ]
     results: list[dict[str, object]] = []
     for conclusion in conclusions:
         entry = {**conclusion["entry"], "completed_at": created.isoformat()}
         state.setdefault("completed_candidates", []).append(entry)
-        next_candidate = _new_candidate(state, source_commit, created - timedelta(microseconds=1))
+        next_candidate = _new_candidate(
+            state, source_commit, created - timedelta(microseconds=1), avoid=live_parameters
+        )
+        live_parameters.append(dict(next_candidate.parameters))
         state["attempt"] = int(state["attempt"]) + 1
         state["candidate_slots"][conclusion["index"]] = _new_slot(next_candidate, state["attempt"])
         results.append(entry)
