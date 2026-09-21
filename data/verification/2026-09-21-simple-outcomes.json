@@ -1,0 +1,114 @@
+{
+  "frozen_scope": "full_ranking",
+  "verification_status": "COMPLETE_7_EVALUABLE_PLUS_1_RESULT_ONLY",
+  "pending_races": [],
+  "races": [
+    {
+      "race_id": "2026-09-21-hanshin-02",
+      "race_name": "2歳未勝利",
+      "field_size": 10,
+      "pre_race_source": "競馬予想検証室・発走前Freeze回答 2026-09-21T10:17:35+09:00",
+      "official_result_source": "ユーザー提供JRA-VAN結果画像 IMG_6712.png (SHA-256 49ce2fedcb80df4dedcc8f8993d0aab7514b533fc214bf1e86b70f4bcced5e4b)",
+      "pre_race_order": ["5", "8", "9", "2", "1", "6", "3", "10", "4", "7"],
+      "actual_top3": ["1", "9", "3"],
+      "official_finish_order": ["1", "9", "3", "5", "7", "2", "10", "8", "6", "4"],
+      "odds_bug_top_candidate": null,
+      "odds_distortion_order": [],
+      "overvaluation_watch": [],
+      "notes": {}
+    },
+    {
+      "race_id": "2026-09-21-hanshin-03",
+      "race_name": "2歳未勝利",
+      "field_size": 13,
+      "pre_race_source": "競馬予想検証室・発走前Freeze回答 2026-09-21T10:44:26+09:00",
+      "official_result_source": "ユーザー提供JRA-VAN結果画像 IMG_6713.png (SHA-256 ecb9032f57646101d1e265a2155cbe9dc743f4abe4ce8cb35ec8cc5aa120c914)",
+      "pre_race_order": ["4", "12", "5", "2", "9", "6", "13", "3", "1", "8", "10", "11", "7"],
+      "actual_top3": ["6", "9", "10"],
+      "official_finish_order": ["6", "9", "10", "3", "4", "13", "1", "8", "12", "7", "11", "2", "5"],
+      "odds_bug_top_candidate": "12",
+      "odds_distortion_order": ["12", "5", "2", "4", "13"],
+      "overvaluation_watch": ["9", "6"],
+      "notes": {}
+    },
+    {
+      "race_id": "2026-09-21-hanshin-07",
+      "race_name": "3歳上1勝クラス",
+      "field_size": 18,
+      "pre_race_source": "競馬予想検証室・発走前Freeze回答 2026-09-21T13:14:17+09:00",
+      "official_result_source": "ユーザー提供JRA-VAN結果画像 IMG_6729.png・IMG_6730.png (SHA-256 f2dac38daea1f9e2a4d19da5b474676d0a047e52c6d994530d692adafb750138 / 290e8f9ceaba48cb9e4a99300d5ef6897577343884309d9aec9634b590c964ff)",
+      "pre_race_order": ["6", "12", "17", "2", "4", "10", "16", "3", "5", "11", "1", "18", "9", "7", "14", "8", "15", "13"],
+      "actual_top3": ["2", "16", "11"],
+      "official_finish_order": ["2", "16", "11", "6", "10", "12", "14", "13", "17", "5", "7", "18", "3", "1", "8", "9", "4", "15"],
+      "odds_bug_top_candidate": "4",
+      "odds_distortion_order": ["4", "10", "16", "3", "18"],
+      "overvaluation_watch": [],
+      "notes": {}
+    },
+    {
+      "race_id": "2026-09-21-hanshin-09",
+      "race_name": "新涼特別",
+      "field_size": 16,
+      "pre_race_source": "data/verification/2026-09-21-hanshin09-shinryo-pre-race.json (SHA-256 05849e3e6bdf65959ef7f5d835969cd22d4e270e0a3f204df5ed1c46c7a04d00)",
+      "official_result_source": "ユーザー提供JRA-VAN結果画像 IMG_6732.png・IMG_6733.png (SHA-256 7782ff5513c33787dcba7f9aeff9dc4b03d41d75969bccde5a92b2f75da4af92 / 381ab71c0ea4fa00e908982d259e8f979bca805cf1e154f3931805ef1922253f)",
+      "pre_race_order": ["12", "3", "13", "2", "4", "14", "16", "9", "6", "8", "11", "1", "10", "15", "7", "5"],
+      "actual_top3": ["14", "3", "12"],
+      "official_finish_order": ["14", "3", "12", "16", "6", "9", "13", "15", "4", "10", "2", "8", "11", "5", "1", "7"],
+      "odds_bug_top_candidate": "13",
+      "odds_distortion_order": ["13", "2", "4", "9"],
+      "overvaluation_watch": ["14", "16"],
+      "notes": {}
+    },
+    {
+      "race_id": "2026-09-21-hanshin-10",
+      "race_name": "Mキタサンブラック",
+      "field_size": 16,
+      "pre_race_source": "data/verification/2026-09-21-hanshin10-m-kitasan-black-pre-race.json (SHA-256 bd0f816dbafb4c5d36beeb6465efc8fa8145c5c8fb6b34c5b3beec47d1a4d96c)",
+      "official_result_source": "ユーザー提供JRA-VAN結果画像 IMG_6720.png (SHA-256 5a0e55416832f33c1336981e26df522afb5cbaea804c2b4ad3ab79a4fe71f8ff)",
+      "pre_race_order": ["8", "16", "10", "1", "15", "11", "5", "3", "4", "9", "2", "6", "12", "14", "7", "13"],
+      "actual_top3": ["11", "9", "7"],
+      "official_finish_order": ["11", "9", "7", "15", "5", "16", "4", "6", "13", "2", "8", "10", "12", "3", "1", "14"],
+      "odds_bug_top_candidate": "16",
+      "odds_distortion_order": ["16", "1", "5", "6"],
+      "overvaluation_watch": ["15", "4"],
+      "notes": {}
+    },
+    {
+      "race_id": "2026-09-21-hanshin-11",
+      "race_name": "神戸新聞杯 G2",
+      "field_size": 11,
+      "pre_race_source": "data/verification/2026-09-21-hanshin11-kobe-shimbun-hai-pre-race.json (SHA-256 94d8581c156d4228c7b1f391be7831dd368b6d5b06e951cf51ce3fe68c03927d)",
+      "official_result_source": "ユーザー提供JRA-VAN結果画像 IMG_6721.png・IMG_6722.png (SHA-256 fc5c26fce6ff06560def37467d9d4f2f2248ef124b0966477275c3eac9a23c58 / c064bd266f4d18440bbb27c43c8c9ea21b6f0675965d93cb67c7caae2943ab2a)",
+      "pre_race_order": ["1", "4", "7", "2", "3", "10", "9", "6", "5", "11", "8"],
+      "actual_top3": ["1", "4", "8"],
+      "official_finish_order": ["1", "4", "8", "3", "6", "7", "2", "9", "5", "11", "10"],
+      "odds_bug_top_candidate": "4",
+      "odds_distortion_order": ["4", "7", "2", "10"],
+      "overvaluation_watch": ["9"],
+      "notes": {}
+    },
+    {
+      "race_id": "2026-09-21-hanshin-12",
+      "race_name": "3歳上1勝クラス",
+      "field_size": 15,
+      "pre_race_source": "data/verification/2026-09-21-hanshin12-three-up-pre-race.json (SHA-256 10e1d33d7d2b97693bfa51a1759e9fa37e358651542bb28a49d1b96d43e9661d)",
+      "official_result_source": "ユーザー提供JRA-VAN結果画像 IMG_6723.png・IMG_6724.png (SHA-256 de994483e9c97b92d83244ceaaeb6fa29cb146199133e7c7c6cfc552a1e5c8e6 / 7ff6d58d33477c8c4fdc480d79b8ed9fe1e158bfc1fdbb07acad301012bf088b)",
+      "pre_race_order": ["9", "6", "5", "7", "10", "4", "14", "3", "8", "1", "2", "12", "13", "11", "15"],
+      "actual_top3": ["5", "9", "13"],
+      "official_finish_order": ["5", "9", "13", "4", "10", "11", "3", "6", "7", "12", "14", "15", "8", "1", "2"],
+      "odds_bug_top_candidate": "6",
+      "odds_distortion_order": ["6", "7", "14", "4"],
+      "overvaluation_watch": ["10"],
+      "notes": {}
+    }
+  ],
+  "non_evaluable_results": [
+    {
+      "race_id": "2026-09-21-hanshin-08",
+      "field_size": 12,
+      "official_result_source": "ユーザー提供JRA-VAN結果画像 IMG_6731.png (SHA-256 822bd67e332d3a36482c67015f0b2b2bb5271b05b13ce99ace5866a0d3976437)",
+      "actual_top3": ["3", "7", "2"],
+      "reason": "発走前Freeze順位の保存証拠を確認できないため、後付け防止規則により報酬集計から除外"
+    }
+  ]
+}

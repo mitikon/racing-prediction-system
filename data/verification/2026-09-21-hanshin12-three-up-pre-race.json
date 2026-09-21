@@ -1,0 +1,89 @@
+{
+  "schema": "pre_race_prediction_v1",
+  "model": "簡易式先行予測λ",
+  "race_id": "2026-09-21-hanshin-12",
+  "race_name": "3歳上1勝クラス",
+  "surface": "dirt",
+  "distance_m": 1400,
+  "going": "良",
+  "field_size": 15,
+  "post_time_jst": "2026-09-21T16:30:00+09:00",
+  "frozen_at_jst": "2026-09-21T16:01:44+09:00",
+  "odds_observed_at_jst": "2026-09-21T15:55:00+09:00",
+  "odds_source": "JRA-VAN screenshots supplied by user",
+  "prediction_kind": "manual_simple_leading_lambda_from_single_odds_snapshot",
+  "git_commit": "785c65574e2cd7e33ec232231d0905c546110535",
+  "source_sha256": {
+    "IMG_6708.png": "033207206aecc1a5be5c2964531b3da4e6e6a81f2ea21a0c2d1f01339333f199",
+    "IMG_6709.png": "86fc04a62db7ca2c73ca10d40efe8efac014bacdb5341502c58d8908ba23ecf0",
+    "IMG_6710.png": "a9c06aa5602605bbaaab6ee8833fd239caac6dcdaafaa48adbdadc642576a8a2"
+  },
+  "odds_by_horse_number": {
+    "1": 33.6,
+    "2": 50.2,
+    "3": 28.6,
+    "4": 11.6,
+    "5": 6.0,
+    "6": 8.4,
+    "7": 19.8,
+    "8": 17.8,
+    "9": 2.7,
+    "10": 5.8,
+    "11": 77.8,
+    "12": 39.7,
+    "13": 31.6,
+    "14": 15.0,
+    "15": 65.4
+  },
+  "lambda_overall_order": [
+    "9",
+    "6",
+    "5",
+    "7",
+    "10",
+    "4",
+    "14",
+    "3",
+    "8",
+    "1",
+    "2",
+    "12",
+    "13",
+    "11",
+    "15"
+  ],
+  "top5": ["9", "6", "5", "7", "10"],
+  "axis_candidates": ["9", "6", "5"],
+  "odds_distortion_candidates": [
+    {
+      "horse_number": "6",
+      "classification": "win_and_place_undervalued",
+      "reason": "京都ダ1400m勝ちと阪神ダ1400m好走歴に対して単勝8.4倍"
+    },
+    {
+      "horse_number": "7",
+      "classification": "place_undervalued",
+      "reason": "阪神ダ1400m5着など近走の安定性に対して単勝19.8倍"
+    },
+    {
+      "horse_number": "14",
+      "classification": "place_undervalued",
+      "reason": "ダ1200m勝ちの先行速度に対して単勝15.0倍"
+    },
+    {
+      "horse_number": "4",
+      "classification": "longshot_watch",
+      "reason": "54kgとダ1400m好走歴に対して単勝11.6倍"
+    }
+  ],
+  "maximum_bug_certified": null,
+  "overvaluation_watch": ["10"],
+  "rsi_training_eligible": false,
+  "notes": [
+    "RESULT情報は不使用。予測順位は正式結果判明後も変更しない。",
+    "阪神ダ1400mとして同距離実績、先行持続力、近走安定性、斤量を優先した。",
+    "10番は未勝利ダ1700m勝ち直後の昇級戦で単勝2番人気のため過大評価警戒とした。",
+    "30分前・15分前・5分前の3時点オッズが未取得のためRSI係数更新と最大バグ認定は行わない。",
+    "これは画像入力による手動簡易評価で、全馬の定量特徴量をコードへ投入した推論ではない。"
+  ]
+}

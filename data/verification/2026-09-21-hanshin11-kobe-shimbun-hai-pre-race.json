@@ -1,0 +1,84 @@
+{
+  "schema": "pre_race_prediction_v1",
+  "model": "簡易式先行予測λ",
+  "race_id": "2026-09-21-hanshin-11",
+  "race_name": "神戸新聞杯 G2",
+  "surface": "turf",
+  "distance_m": 2400,
+  "course": "阪神・外回りBコース",
+  "going": "良",
+  "field_size": 11,
+  "post_time_jst": "2026-09-21T15:45:00+09:00",
+  "frozen_at_jst": "2026-09-21T15:16:48+09:00",
+  "odds_observed_at_jst": "2026-09-21T15:10:00+09:00",
+  "odds_source": "JRA-VAN screenshots supplied by user",
+  "prediction_kind": "manual_simple_leading_lambda_from_single_odds_snapshot",
+  "git_commit": "785c65574e2cd7e33ec232231d0905c546110535",
+  "source_sha256": {
+    "IMG_6701.png": "9628a59fc22a418bc185a8f1e5ad9b364e35bc24e5909a3f8d2f0597bea9057f",
+    "IMG_6702.jpeg": "2352c99593b9f5cfdf65bfc53dabf9a62d02dc6f68bc27db25b7b13e90e27c94",
+    "IMG_6703.jpeg": "ed98798cf1c8e46ec8fa393b07ba14661ec4151ad28343edf1a03b0b2c233370",
+    "IMG_6704.jpeg": "b33c171d5f1f1da0369cbdf786fe6bc39db7e6a4221b042427865c8a53512ceb"
+  },
+  "odds_by_horse_number": {
+    "1": 1.4,
+    "2": 16.3,
+    "3": 11.9,
+    "4": 12.8,
+    "5": 52.8,
+    "6": 31.4,
+    "7": 13.8,
+    "8": 74.2,
+    "9": 8.1,
+    "10": 34.6,
+    "11": 28.7
+  },
+  "lambda_overall_order": [
+    "1",
+    "4",
+    "7",
+    "2",
+    "3",
+    "10",
+    "9",
+    "6",
+    "5",
+    "11",
+    "8"
+  ],
+  "top5": ["1", "4", "7", "2", "3"],
+  "axis_candidates": ["1", "4", "7"],
+  "odds_distortion_candidates": [
+    {
+      "horse_number": "4",
+      "classification": "win_and_place_undervalued",
+      "reason": "日本ダービー6着と毎日杯勝ちの重賞実績に対して単勝12.8倍"
+    },
+    {
+      "horse_number": "7",
+      "classification": "win_and_place_undervalued",
+      "reason": "京都新聞杯勝ちと2400m級の持続力に対して単勝13.8倍"
+    },
+    {
+      "horse_number": "2",
+      "classification": "place_undervalued",
+      "reason": "芝2000mの連勝内容と上昇度に対して単勝16.3倍"
+    },
+    {
+      "horse_number": "10",
+      "classification": "longshot_watch",
+      "reason": "芝1800～2200mの連勝と上昇余地に対して単勝34.6倍"
+    }
+  ],
+  "maximum_bug_certified": null,
+  "overvaluation_watch": ["9"],
+  "rsi_training_eligible": false,
+  "notes": [
+    "RESULT情報は不使用。予測順位は正式結果判明後も変更しない。",
+    "阪神芝2400m外回りとしてダービー実績、重賞実績、長距離持続力と末脚を優先した。",
+    "1番は能力最上位だが単勝1.4倍のためオッズ歪み候補とは分離した。",
+    "9番は単勝2番人気に対してダービー16着と青葉賞7着を過大評価警戒とした。",
+    "30分前・15分前・5分前の3時点オッズが未取得のためRSI係数更新と最大バグ認定は行わない。",
+    "これは画像入力による手動簡易評価で、全馬の定量特徴量をコードへ投入した推論ではない。"
+  ]
+}

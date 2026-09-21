@@ -1,0 +1,92 @@
+{
+  "schema": "pre_race_prediction_v1",
+  "model": "簡易式先行予測λ",
+  "race_id": "2026-09-21-hanshin-10",
+  "race_name": "Mキタサンブラック",
+  "surface": "turf",
+  "distance_m": 2200,
+  "course": "阪神・内回りBコース",
+  "going": "良",
+  "field_size": 16,
+  "post_time_jst": "2026-09-21T15:05:00+09:00",
+  "frozen_at_jst": "2026-09-21T14:49:11+09:00",
+  "odds_observed_at_jst": "2026-09-21T14:42:00+09:00",
+  "odds_source": "JRA-VAN screenshots supplied by user",
+  "prediction_kind": "manual_simple_leading_lambda_from_single_odds_snapshot",
+  "git_commit": "785c65574e2cd7e33ec232231d0905c546110535",
+  "source_sha256": {
+    "IMG_6698.png": "63f97fc885a6618ab99b154a59ab9f5a632ba55ab7ddf764c3b230479973b66a",
+    "IMG_6699.jpeg": "cdf2c9bed1e43eae192db680579ab5d6382f7f67853da2e95e1a9e7175ab3ff9",
+    "IMG_6700.png": "25b91cff6db09ae3de84f09cdbbe1ab42c975f087dd60cd94c58fac41916a5d4"
+  },
+  "odds_by_horse_number": {
+    "1": 15.6,
+    "2": 29.3,
+    "3": 12.1,
+    "4": 10.7,
+    "5": 13.7,
+    "6": 65.0,
+    "7": 65.9,
+    "8": 4.2,
+    "9": 18.5,
+    "10": 4.5,
+    "11": 9.0,
+    "12": 47.3,
+    "13": 75.6,
+    "14": 38.2,
+    "15": 7.3,
+    "16": 17.6
+  },
+  "lambda_overall_order": [
+    "8",
+    "16",
+    "10",
+    "1",
+    "15",
+    "11",
+    "5",
+    "3",
+    "4",
+    "9",
+    "2",
+    "6",
+    "12",
+    "14",
+    "7",
+    "13"
+  ],
+  "top5": ["8", "16", "10", "1", "15"],
+  "axis_candidates": ["8", "16", "10"],
+  "odds_distortion_candidates": [
+    {
+      "horse_number": "16",
+      "classification": "win_and_place_undervalued",
+      "reason": "芝2000m勝ちからの成長余地と56kgに対して単勝17.6倍"
+    },
+    {
+      "horse_number": "1",
+      "classification": "place_undervalued",
+      "reason": "阪神芝2000m先行3着と最軽量51kgに対して単勝15.6倍"
+    },
+    {
+      "horse_number": "5",
+      "classification": "place_undervalued",
+      "reason": "札幌芝2000mの近走2着に対して単勝13.7倍"
+    },
+    {
+      "horse_number": "6",
+      "classification": "longshot_watch",
+      "reason": "芝2000m勝ち実績と上昇余地に対して単勝65.0倍"
+    }
+  ],
+  "maximum_bug_certified": null,
+  "overvaluation_watch": ["15", "4"],
+  "rsi_training_eligible": false,
+  "notes": [
+    "RESULT情報は不使用。予測順位は正式結果判明後も変更しない。",
+    "阪神芝2200m内回りとして持続力、2000～2600m実績、好位運び、斤量差を評価した。",
+    "1番は6か月休養明けかつ馬体重20kg増、15番は1年3か月休養明けのため状態面の不確実性を残す。",
+    "30分前・15分前・5分前の3時点オッズが未取得のためRSI係数更新と最大バグ認定は行わない。",
+    "これは画像入力による手動簡易評価で、全馬の定量特徴量をコードへ投入した推論ではない。"
+  ]
+}
