@@ -14,6 +14,7 @@ from math import exp
 from typing import Mapping, Sequence
 
 from .adaptive_rsi_bridge import AdaptiveRsiBridge, RsiBridgeObservation
+from .simple_realtime_rsi import SimpleRealtimeRsiSignal
 
 
 class Going(str, Enum):
