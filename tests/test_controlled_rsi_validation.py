@@ -11,7 +11,7 @@ from racing_lambda import (
     RacingRsiCandidate,
     SimpleHorseFeatures,
     SimpleLeadingSignalLambdaV02,
-    SimpleRealtimeRsiSignal,
+    SimpleRealtimeWsiSignal,
     SimpleRaceContext,
     TrialMetrics,
     ingest_snapshot,
@@ -23,8 +23,8 @@ UTC = timezone.utc
 CREATED = datetime(2026, 9, 1, tzinfo=UTC)
 
 
-def _candidate(mode: str):
-    parameters = {"rsi_weight": 0.2}
+def _candidate(mode: str, *, parameters: dict | None = None):
+    parameters = parameters if parameters is not None else {"wsi_weight": 0.2}
     return RacingRsiCandidate(
         mode=mode,
         candidate_id=f"{mode}-g1",
@@ -63,8 +63,8 @@ def _full_history(race_id: str, offset: float = 0.0):
     ]
 
 
-def _full_model(rsi_weight: float = 0.2):
-    return FullLeadingPredictionLambda(enabled=True, rsi_weight=rsi_weight).fit_from_jra_history(
+def _full_model(wsi_weight: float = 0.2):
+    return FullLeadingPredictionLambda(enabled=True, wsi_weight=wsi_weight).fit_from_jra_history(
         recent_races=[_full_history("RECENT")],
         prior_races=[_full_history("PRIOR", .01)],
         historical_results=[
@@ -91,7 +91,7 @@ def _simple_horses():
 
 def _simple_signals(captured: datetime):
     return [
-        SimpleRealtimeRsiSignal(
+        SimpleRealtimeWsiSignal(
             horse_id=str(index), top3_probability=.9 - index * .1,
             bug_score=.8 - index * .1, feature_count=12,
             captured_at=captured, trained_until=captured - timedelta(days=1),
@@ -169,6 +169,30 @@ def test_full_official_entrypoint_cannot_return_before_pre_race_freeze(tmp_path)
         )
 
 
+def test_pre_rename_rsi_weight_candidate_still_validates_against_current_model(tmp_path):
+    """A candidate sealed before the rsi_weight -> wsi_weight rename must keep
+    working: its hash-locked parameters dict is never rewritten in place, so
+    the model's current (wsi_weight-only) attestation must still match it via
+    canonicalize_parameter_keys.
+    """
+    loop = ControlledRsiValidationLoop(tmp_path, _candidate("full", parameters={"rsi_weight": 0.2}))
+    baseline = _full_model(.0)
+    candidate = _full_model(.2)
+    snapshots = _full_history("TARGET", .02)
+    start = datetime(2026, 9, 9, 4, tzinfo=UTC)
+
+    output = candidate.score_jra_race(
+        snapshots,
+        scheduled_start=start,
+        validation_loop=loop,
+        baseline_model=baseline,
+        prediction_frozen_at=start - timedelta(minutes=30),
+    )
+
+    assert isinstance(output, ControlledPrediction)
+    assert output.mode == "full"
+
+
 def test_full_official_entrypoint_rejects_snapshot_newer_than_freeze(tmp_path):
     loop = ControlledRsiValidationLoop(tmp_path, _candidate("full"))
     start = datetime(2026, 9, 9, 4, tzinfo=UTC)
@@ -211,7 +235,7 @@ def test_full_official_entrypoint_rejects_fake_validation_loop():
 def test_simple_official_entrypoint_returns_only_attested_prediction(tmp_path):
     loop = ControlledRsiValidationLoop(tmp_path, _candidate("simple"))
     baseline = SimpleLeadingSignalLambdaV02()
-    candidate = SimpleLeadingSignalLambdaV02(rsi_weight=.2)
+    candidate = SimpleLeadingSignalLambdaV02(wsi_weight=.2)
     start = CREATED + timedelta(days=2)
     captured = start - timedelta(minutes=5)
     context = SimpleRaceContext(
@@ -247,7 +271,7 @@ def test_simple_official_entrypoint_rejects_capture_after_freeze(tmp_path):
         projected_front_runners=2, scheduled_start=start,
     )
     with pytest.raises(ValueError, match="capture and freeze"):
-        SimpleLeadingSignalLambdaV02(rsi_weight=.2).rank(
+        SimpleLeadingSignalLambdaV02(wsi_weight=.2).rank(
             context,
             _simple_horses(),
             captured_at=start - timedelta(minutes=5),

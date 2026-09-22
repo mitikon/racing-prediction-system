@@ -19,11 +19,11 @@ from typing import Mapping
 import pandas as pd
 
 from .jra_official_free_ingestion import OfficialSnapshot
-from .adaptive_rsi_bridge import AdaptiveRsiBridge, RsiBridgeObservation
+from .adaptive_wsi_bridge import AdaptiveWsiBridge, WsiBridgeObservation
 from .schema import OfficialResult
-from .rsi_self_learning import (
-    RACING_RSI_FEATURE_VERSION,
-    RacingRsiOutcomeLearner,
+from .wsi_self_learning import (
+    RACING_WSI_FEATURE_VERSION,
+    RacingWsiOutcomeLearner,
     build_result_labels,
 )
 from .realtime_market_leading_signal import (
@@ -137,18 +137,18 @@ class FullLeadingPredictionLambda:
         *,
         enabled: bool = False,
         variance_target: float = 0.90,
-        rsi_weight: float = 0.25,
+        wsi_weight: float = 0.25,
     ) -> None:
-        if not 0.0 <= rsi_weight <= 1.0:
-            raise ValueError("rsi_weight must be between 0 and 1")
+        if not 0.0 <= wsi_weight <= 1.0:
+            raise ValueError("wsi_weight must be between 0 and 1")
         self._core = RealtimeMarketLeadingSignal(
             enabled=enabled,
             variance_target=variance_target,
         )
-        self.rsi_weight = float(rsi_weight)
-        self.rsi_learner = RacingRsiOutcomeLearner()
-        self.rsi_feature_version = RACING_RSI_FEATURE_VERSION
-        self.adaptive_rsi_bridge: AdaptiveRsiBridge | None = None
+        self.wsi_weight = float(wsi_weight)
+        self.wsi_learner = RacingWsiOutcomeLearner()
+        self.wsi_feature_version = RACING_WSI_FEATURE_VERSION
+        self.adaptive_wsi_bridge: AdaptiveWsiBridge | None = None
 
     @property
     def enabled(self) -> bool:
@@ -160,7 +160,7 @@ class FullLeadingPredictionLambda:
 
     def rsi_candidate_parameters(self) -> dict[str, object]:
         """Parameters this prediction path can actually apply and attest."""
-        return {"rsi_weight": self.rsi_weight}
+        return {"wsi_weight": self.wsi_weight}
 
     @property
     def model(self):
@@ -215,9 +215,9 @@ class FullLeadingPredictionLambda:
             for race in all_history for snapshot in race
         )
         self._core.fit(recent.loc[:, usable_columns], prior.loc[:, usable_columns])
-        self.adaptive_rsi_bridge = None
-        self.rsi_learning_summary_ = None
-        self.rsi_history_result_known_at_ = None
+        self.adaptive_wsi_bridge = None
+        self.wsi_learning_summary_ = None
+        self.wsi_history_result_known_at_ = None
         if historical_results is not None:
             historical_results = tuple(historical_results)
             if historical_result_known_at is not None:
@@ -231,23 +231,23 @@ class FullLeadingPredictionLambda:
                         datetime.fromisoformat(snapshot.observed_at) >= when for snapshot in race
                     ):
                         raise ValueError("full-mode results must follow their PRE_RACE observations")
-                self.rsi_history_result_known_at_ = max(historical_result_known_at.values())
+                self.wsi_history_result_known_at_ = max(historical_result_known_at.values())
             combined_history = pd.concat([prior, recent], axis=0)
             labels = build_result_labels(combined_history.index, historical_results)
-            self.rsi_learner.fit(combined_history, labels)
-            self.rsi_learning_summary_ = self.rsi_learner.summary_
+            self.wsi_learner.fit(combined_history, labels)
+            self.wsi_learning_summary_ = self.wsi_learner.summary_
         return self
 
-    def fit_rsi_bridge(
-        self, observations: Sequence[RsiBridgeObservation], *, prediction_at: datetime
+    def fit_wsi_bridge(
+        self, observations: Sequence[WsiBridgeObservation], *, prediction_at: datetime
     ) -> "FullLeadingPredictionLambda":
-        """Adopt an RSI/λ score mix only if frozen past races beat λ alone."""
-        if getattr(self, "rsi_learning_summary_", None) is None:
-            raise RuntimeError("fit RSI from historical JRA results before calibrating")
-        if self.rsi_history_result_known_at_ is None or self.rsi_history_result_known_at_ >= prediction_at:
-            raise ValueError("adaptive full RSI requires dated completed historical results")
-        candidate = AdaptiveRsiBridge("full").fit(observations, prediction_at=prediction_at)
-        self.adaptive_rsi_bridge = candidate
+        """Adopt a WSI/λ score mix only if frozen past races beat λ alone."""
+        if getattr(self, "wsi_learning_summary_", None) is None:
+            raise RuntimeError("fit WSI from historical JRA results before calibrating")
+        if self.wsi_history_result_known_at_ is None or self.wsi_history_result_known_at_ >= prediction_at:
+            raise ValueError("adaptive full WSI requires dated completed historical results")
+        candidate = AdaptiveWsiBridge("full").fit(observations, prediction_at=prediction_at)
+        self.adaptive_wsi_bridge = candidate
         return self
 
     def score_jra_race(
@@ -300,20 +300,20 @@ class FullLeadingPredictionLambda:
             raise ValueError("scheduled_start must be timezone-aware")
         if any(row.captured_at >= scheduled_start for row in rows):
             raise ValueError("本格先行予測λ requires only before-start snapshots")
-        bridge = self.adaptive_rsi_bridge
+        bridge = self.adaptive_wsi_bridge
         if bridge is not None:
             if rows[0].race_id in self.history_race_ids_ or min(row.captured_at for row in rows) <= self.history_last_observed_at_:
-                raise ValueError("target must follow the full RSI/PCA training history")
-            if min(row.captured_at for row in rows) <= self.rsi_history_result_known_at_:
-                raise ValueError("target must follow full RSI training results")
+                raise ValueError("target must follow the full WSI/PCA training history")
+            if min(row.captured_at for row in rows) <= self.wsi_history_result_known_at_:
+                raise ValueError("target must follow full WSI training results")
         if not hasattr(self, "feature_columns_"):
             raise RuntimeError("fit_from_jra_history must be called before scoring")
         features = extract_market_features(rows)
         selected = features.reindex(columns=list(self.feature_columns_), fill_value=0.0)
         anomaly = self.model.anomaly_score(selected)
-        rsi_scores = (
-            self.rsi_learner.predict(features)
-            if self.rsi_learning_summary_ is not None
+        wsi_scores = (
+            self.wsi_learner.predict(features)
+            if self.wsi_learning_summary_ is not None
             else None
         )
         counts: dict[str, int] = {}
@@ -326,24 +326,24 @@ class FullLeadingPredictionLambda:
                 feature_count=len(self.feature_columns_),
                 snapshot_count=counts[horse_id],
                 realtime_ready=True,
-                rsi_self_learning_score=(
-                    float(rsi_scores.loc[horse_id]) if rsi_scores is not None else None
+                wsi_self_learning_score=(
+                    float(wsi_scores.loc[horse_id]) if wsi_scores is not None else None
                 ),
                 combined_score=(
                     bridge.blend(
-                        float(anomaly.loc[horse_id]), float(rsi_scores.loc[horse_id]),
+                        float(anomaly.loc[horse_id]), float(wsi_scores.loc[horse_id]),
                         captured_at=min(row.captured_at for row in rows),
                     )
-                    if bridge is not None and rsi_scores is not None
-                    else (1.0 - self.rsi_weight) * float(anomaly.loc[horse_id])
-                    + self.rsi_weight * float(rsi_scores.loc[horse_id])
-                    if rsi_scores is not None else float(anomaly.loc[horse_id])
+                    if bridge is not None and wsi_scores is not None
+                    else (1.0 - self.wsi_weight) * float(anomaly.loc[horse_id])
+                    + self.wsi_weight * float(wsi_scores.loc[horse_id])
+                    if wsi_scores is not None else float(anomaly.loc[horse_id])
                 ),
-                rsi_feature_count=(
-                    self.rsi_learning_summary_.feature_count
-                    if self.rsi_learning_summary_ is not None else 0
+                wsi_feature_count=(
+                    self.wsi_learning_summary_.feature_count
+                    if self.wsi_learning_summary_ is not None else 0
                 ),
-                adaptive_rsi_weight=(bridge.weight_ if bridge is not None else None),
+                adaptive_wsi_weight=(bridge.weight_ if bridge is not None else None),
             )
             for horse_id in selected.index
         ]

@@ -3,11 +3,11 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from racing_lambda.adaptive_rsi_bridge import AdaptiveRsiBridge, RsiBridgeObservation
+from racing_lambda.adaptive_wsi_bridge import AdaptiveWsiBridge, WsiBridgeObservation
 from racing_lambda.simple_leading_signal_v02 import (
     Going, SimpleHorseFeatures, SimpleLeadingSignalLambdaV02, SimpleRaceContext,
 )
-from racing_lambda.simple_realtime_rsi import SimpleRealtimeRsiSignal
+from racing_lambda.simple_realtime_wsi import SimpleRealtimeWsiSignal
 
 
 BASE = datetime(2026, 8, 1, 12, tzinfo=timezone.utc)
@@ -19,14 +19,14 @@ def frozen_history(mode="simple", *, helpful=True):
         start = BASE + timedelta(days=day)
         for number in range(1, 7):
             placed = number <= 3
-            rows.append(RsiBridgeObservation(
+            rows.append(WsiBridgeObservation(
                 mode=mode, race_id=f"R{day}", horse_id=str(number), field_size=6,
-                rsi_trained_until=start - timedelta(hours=3),
+                wsi_trained_until=start - timedelta(hours=3),
                 frozen_at=start - timedelta(hours=1),
                 scheduled_start=start,
                 result_known_at=start + timedelta(hours=1),
                 lambda_score=0.47 if placed else 0.53,
-                rsi_score=(0.9 if placed else 0.1) if helpful else
+                wsi_score=(0.9 if placed else 0.1) if helpful else
                           (0.1 if placed else 0.9),
                 top3=placed,
             ))
@@ -36,9 +36,9 @@ def frozen_history(mode="simple", *, helpful=True):
 TARGET = BASE + timedelta(days=9)
 
 
-def test_separate_modes_adopt_only_improving_rsi_from_chronological_races():
-    simple = AdaptiveRsiBridge("simple").fit(frozen_history(), prediction_at=TARGET)
-    full = AdaptiveRsiBridge("full").fit(frozen_history("full"), prediction_at=TARGET)
+def test_separate_modes_adopt_only_improving_wsi_from_chronological_races():
+    simple = AdaptiveWsiBridge("simple").fit(frozen_history(), prediction_at=TARGET)
+    full = AdaptiveWsiBridge("full").fit(frozen_history("full"), prediction_at=TARGET)
     assert simple.summary_.adopted and full.summary_.adopted
     assert simple.summary_.training_races == 6
     assert simple.summary_.validation_races == 2
@@ -47,8 +47,8 @@ def test_separate_modes_adopt_only_improving_rsi_from_chronological_races():
     assert full.summary_.mode == "full"
 
 
-def test_harmful_rsi_is_regularized_away():
-    bridge = AdaptiveRsiBridge("simple").fit(
+def test_harmful_wsi_is_regularized_away():
+    bridge = AdaptiveWsiBridge("simple").fit(
         frozen_history(helpful=False), prediction_at=TARGET
     )
     assert bridge.weight_ == 0
@@ -60,20 +60,20 @@ def test_after_result_predictions_and_future_results_are_rejected():
     rows = frozen_history()
     rows[0] = replace(rows[0], result_known_at=TARGET + timedelta(hours=1))
     with pytest.raises(ValueError, match="future results"):
-        AdaptiveRsiBridge("simple").fit(rows, prediction_at=TARGET)
+        AdaptiveWsiBridge("simple").fit(rows, prediction_at=TARGET)
     with pytest.raises(ValueError, match="training must precede freeze"):
         replace(frozen_history()[0], frozen_at=BASE + timedelta(hours=2))
     with pytest.raises(ValueError, match="insufficient distinct"):
-        AdaptiveRsiBridge("simple").fit(frozen_history()[:42], prediction_at=TARGET)
+        AdaptiveWsiBridge("simple").fit(frozen_history()[:42], prediction_at=TARGET)
     with pytest.raises(ValueError, match="one racing mode"):
-        AdaptiveRsiBridge("full").fit(frozen_history(), prediction_at=TARGET)
+        AdaptiveWsiBridge("full").fit(frozen_history(), prediction_at=TARGET)
     rows = frozen_history()
     rows.pop(0)
     with pytest.raises(ValueError, match="full unique runner list"):
-        AdaptiveRsiBridge("simple").fit(rows, prediction_at=TARGET)
+        AdaptiveWsiBridge("simple").fit(rows, prediction_at=TARGET)
 
 
-def test_simple_lambda_joins_rsi_only_after_training_and_before_next_start():
+def test_simple_lambda_joins_wsi_only_after_training_and_before_next_start():
     horses = [SimpleHorseFeatures(
         horse_id=str(i), horse_name=f"Horse {i}", odds=3.0 + i,
         age=3, assigned_weight_kg=57.0, body_weight_kg=490,
@@ -85,18 +85,18 @@ def test_simple_lambda_joins_rsi_only_after_training_and_before_next_start():
     ) for i in range(1, 7)]
     context = SimpleRaceContext("TARGET", "芝", 2200, Going.FIRM,
                                 False, False, 2, TARGET + timedelta(hours=2))
-    signals = [SimpleRealtimeRsiSignal(str(i), 0.9 if i == 1 else 0.1,
+    signals = [SimpleRealtimeWsiSignal(str(i), 0.9 if i == 1 else 0.1,
                                        0.8 if i == 1 else 0.2, 6,
                                        captured_at=TARGET,
                                        trained_until=TARGET - timedelta(hours=1))
                for i in range(1, 7)]
-    model = SimpleLeadingSignalLambdaV02().fit_rsi_bridge(
+    model = SimpleLeadingSignalLambdaV02().fit_wsi_bridge(
         frozen_history(), prediction_at=TARGET
     )
     output = model.rank_research(context, horses, signals, captured_at=TARGET)
-    assert all(row.adaptive_rsi_weight == model.adaptive_rsi_bridge.weight_
+    assert all(row.adaptive_wsi_weight == model.adaptive_wsi_bridge.weight_
                for row in output.lambda_overall_final)
-    assert all(row.realtime_rsi_used for row in output.lambda_overall_final)
+    assert all(row.realtime_wsi_used for row in output.lambda_overall_final)
     with pytest.raises(ValueError, match="all runners"):
         model.rank_research(context, horses, signals[:-1], captured_at=TARGET)
     with pytest.raises(ValueError, match="future scheduled_start"):

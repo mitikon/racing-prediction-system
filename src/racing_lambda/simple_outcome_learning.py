@@ -1,7 +1,7 @@
 """簡易式先行予測λの発走前順位と事後結果の監査。
 
-これは結果からモデルを再学習する前段のラベル生成である。RSI用の
-3時点オッズがないレースを、RSI学習済みと表示しない。
+これは結果からモデルを再学習する前段のラベル生成である。WSI（Wilder Strength Index）用の
+3時点オッズがないレースを、WSI学習済みと表示しない。
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ def audit_outcomes(races: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     """Audit immutable PRE_RACE ranks; never re-rank using RESULT data.
 
     Missing pre-race features or three chronological odds snapshots explicitly
-    block RSI parameter training. Descriptions supplied by a human are retained
+    block WSI parameter training. Descriptions supplied by a human are retained
     as observations, never promoted to proved causal explanations.
     """
     if not races:
@@ -109,7 +109,7 @@ def audit_outcomes(races: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         },
         "excluded_podium_horses": [asdict(item) for item in misses],
         "next_race_training_labels": labels,
-        "rsi_training": {
+        "wsi_training": {
             "performed": False,
             "reason": "3時点の発走前オッズと全馬の定量特徴量が保存されていない",
             "next_step": "時点固定データを蓄積してから、後続レースだけで検証する",
@@ -220,7 +220,7 @@ def audit_published_outcomes(races: Sequence[Mapping[str, Any]]) -> dict[str, An
             "effective_from": "next_race_only",
             "scope": "published_horses_and_podium_exclusions",
         },
-        "rsi_training": {
+        "wsi_training": {
             "performed": False,
             "reason": "全馬の定量特徴量と30/15/5分の3時点オッズが保存されていない",
             "next_step": "同形式のPRE_RACE特徴量を8レース以上固定し、後続レースで候補を比較する",

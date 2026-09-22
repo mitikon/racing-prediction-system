@@ -7,6 +7,10 @@
 - **簡易式先行予測λ** = `SimpleLeadingPredictionLambda`
 - **部分空間正則化PCA＋先行シグナル予測λ（米国株式市場）** は別リポジトリ `mitikonpro` で管理し、このリポジトリには含めません。
 
+## 「RSI」と「WSI」の定義
+
+このリポジトリで「RSI」という略称は**Recursive Self-Improvement（再帰的自己改善）**のみを指します（`recursive_self_improvement.py`の`RacingRecursiveImprovementGate`・`racing_maintenance_rsi`など）。相対力指数（Relative Strength Index、Wilderの計算式）は**WSI（Wilder Strength Index）**と呼び分け、`wsi_self_learning.py`・`simple_realtime_wsi.py`・`adaptive_wsi_bridge.py`に実装します。コード・変数名・README・テストで「RSI」と「WSI」を混同しません。
+
 ## 本格先行予測λの固定中核
 競馬側の正則化PCAは次の固定構造を使用します。
 
@@ -14,12 +18,12 @@
 C_reg = 0.10 * C_recent + 0.90 * C_prior
 ```
 
-## RSI自己学習
-- 全券種の市場支持率について5・7・14・21回のWilder RSIを生成
-- RSI水準、3観測変化速度、50突破、30/70圏の継続・離脱をPCAへ入力
+## WSI自己学習
+- 全券種の市場支持率について5・7・14・21回のWilder Strength Index（WSI）を生成
+- WSI水準、3観測変化速度、50突破、30/70圏の継続・離脱をPCAへ入力
 - 30/70は固定的な買い・消し条件にせず、過去のPRE_RACEと正式結果から有効度を学習
 - 同一レースのRESULTは予測入力へ入れず、確定結果は次レース以降だけに反映
-- RSI統合比率は運用上の合成値で、固定中核の0.10対0.90正則化とは完全に別管理
+- WSI統合比率は運用上の合成値で、固定中核の0.10対0.90正則化とは完全に別管理
 
 ## 運用原則
 - 発走前PRE_RACE予測を固定保存
@@ -42,7 +46,7 @@ python -m pytest -q
 1. 写真OCR・プロンプトから正規化された予想Top5を、発走前に`PRE_RACE`へFreeze保存
 2. 許可された経路から投入されたJRA公式結果（レースタイム、通過順位、最終オッズ、全馬着順）を`RESULT`へ保存
 3. 表示5頭の成績を`○/5`、実際の1〜3着カバーを`○/3`として評価
-4. 結果ラベルを`LEARNING/rsi_feedback.json`へ保存し、次回以降のRSI候補学習だけに使用
+4. 結果ラベルを`LEARNING/rsi_feedback.json`へ保存し、次回以降のRSI（再帰的自己改善）候補学習だけに使用
 5. GitHub Actionsが最新mainを`pull --ff-only`後、全テストを通して追記データをpush
 
 ```bash
@@ -65,13 +69,13 @@ JRA由来の外部JSON・CSV・HTMLは、許可形式、容量、実行形式偽
 保守専用RSIには、自動投票、予測ロジックの自己変更、`main`への自動マージ、投資側リポジトリへのアクセス権限を与えません。
 
 
-## 簡易式先行予測λ：3時点オッズRSI自己学習
+## 簡易式先行予測λ：3時点オッズWSI自己学習
 
 JRA-VAN/Windows環境が未整備の期間は、簡易式先行予測λに任意のリアルタイム市場レイヤーを接続できます。
 
 想定取得時点は発走 **30分前・15分前・5分前** の3回です。単勝・複勝・枠連・馬連・ワイド・馬単・三連複・三連単を馬単位の支持量へ正規化して、30→15分、15→5分、30→5分の変化率、加速度、ボラティリティ、券種間乖離、市場幅を特徴量化します。
 
-RSI自己学習は、完了済み過去レースのPRE_RACE特徴量とその後の正式結果だけで学習します。同一レースのRESULTを発走前予測へ混入させることは禁止します。
+WSI自己学習は、完了済み過去レースのPRE_RACE特徴量とその後の正式結果だけで学習します。同一レースのRESULTを発走前予測へ混入させることは禁止します。
 
 公開JRAページへのネットワーク自動取得そのものはこのリポジトリでは実装せず、許可された取得経路またはChatGPT/手動で取得したPRE_RACEスナップショットを入力します。
 
@@ -95,20 +99,20 @@ ChatGPTがこのチャットで予想を行い、ユーザーが正式結果を�
 
 発走前に公開順位の一部だけを保存した日は、入力へ`"frozen_scope": "published_ranking_only"`を指定します。この監査は公開馬だけに結果ラベルを付け、非公開馬へ架空の順位や負例ラベルを補いません。2026-09-20の8レースはこの形式で保存し、勝馬抽出漏れ3件を次レース以降の学習証拠へ追加しました。全馬特徴量と3時点オッズがないため、重み更新と世代昇格は行っていません。
 
-2026-09-13の5レースには全馬の定量特徴量と30/15/5分の3時点オッズが揃っていません。したがって既存の`SimpleThreeSnapshotRsiLearner.fit`をこのデータで実行せず、RSIの重みも自動変更しません。次回以降に発走前特徴量・時刻付き3時点オッズ・正式結果を蓄積し、学習対象より後のレースで改善したかを確認してから採否を決めます。
+2026-09-13の5レースには全馬の定量特徴量と30/15/5分の3時点オッズが揃っていません。したがって既存の`SimpleThreeSnapshotWsiLearner.fit`をこのデータで実行せず、WSIの重みも自動変更しません。次回以降に発走前特徴量・時刻付き3時点オッズ・正式結果を蓄積し、学習対象より後のレースで改善したかを確認してから採否を決めます。
 
-## 本格型・簡易式それぞれのλ⇔RSI適応接続
+## 本格型・簡易式それぞれのλ⇔WSI適応接続
 
-`AdaptiveRsiBridge("full")` と `AdaptiveRsiBridge("simple")` は独立した学習状態です。各モードで**予想時に固定した**全出走馬のλスコア、RSIスコア、公式出走頭数 `field_size`、発走時刻、予測固定時刻、RSIが参照した結果の最終時刻、正式結果の判明時刻・3着内ラベルを `RsiBridgeObservation` に入力します。両スコアは [0,1] の同じ尺度で記録します。公式出走頭数と全馬レコードが一致し、出走馬5頭以上・3着内3頭・8レース以上の時だけ、先頭のレースで候補重みを学習し、後方25%（最低2レース）の時系列検証でλ単独より3着内ラベルとの平均二乗誤差が改善した場合にのみRSI重みを採用します。元のλ異常値は確率校正済みとはみなさず、この誤差は重み選択用の代理指標です。候補重みには二乗ペナルティと上限0.50を設け、改善しなければ0に戻します。これは**スコア結合の正則化**であり、本格型の固定PCA相関比 `0.10×直近 + 0.90×事前` を変更しません。
+`AdaptiveWsiBridge("full")` と `AdaptiveWsiBridge("simple")` は独立した学習状態です。各モードで**予想時に固定した**全出走馬のλスコア、WSIスコア、公式出走頭数 `field_size`、発走時刻、予測固定時刻、WSIが参照した結果の最終時刻、正式結果の判明時刻・3着内ラベルを `WsiBridgeObservation` に入力します。両スコアは [0,1] の同じ尺度で記録します。公式出走頭数と全馬レコードが一致し、出走馬5頭以上・3着内3頭・8レース以上の時だけ、先頭のレースで候補重みを学習し、後方25%（最低2レース）の時系列検証でλ単独より3着内ラベルとの平均二乗誤差が改善した場合にのみWSI重みを採用します。元のλ異常値は確率校正済みとはみなさず、この誤差は重み選択用の代理指標です。候補重みには二乗ペナルティと上限0.50を設け、改善しなければ0に戻します。これは**スコア結合の正則化**であり、本格型の固定PCA相関比 `0.10×直近 + 0.90×事前` を変更しません。
 
-- 本格型: `fit_from_jra_history(..., historical_results=..., historical_result_known_at=...)` で過去のPRE_RACEと結果時刻を検査し、`fit_rsi_bridge(full_records, prediction_at=...)` の後、正式API `score_jra_race(..., validation_loop=..., baseline_model=..., prediction_frozen_at=...)` を呼びます。このAPIは現行版と候補版を同じ入力で評価し、PRE_RACE固定に成功するまで予測を返しません。
-- 簡易式: `SimpleThreeSnapshotRsiLearner.fit(..., result_known_at=...)` に発走30/15/5分前相当のオッズと過去の結果時刻を与え、`score(target_snapshots)` から時刻を付けた全馬シグナルを取得します。正式API `SimpleLeadingPredictionLambda().rank(..., captured_at=..., validation_loop=..., baseline_model=..., prediction_frozen_at=...)` もPRE_RACE固定を必須とします。`context.scheduled_start` は必須です。従来の市場バグ評価は別欄に残します。
+- 本格型: `fit_from_jra_history(..., historical_results=..., historical_result_known_at=...)` で過去のPRE_RACEと結果時刻を検査し、`fit_wsi_bridge(full_records, prediction_at=...)` の後、正式API `score_jra_race(..., validation_loop=..., baseline_model=..., prediction_frozen_at=...)` を呼びます。このAPIは現行版と候補版を同じ入力で評価し、PRE_RACE固定に成功するまで予測を返しません。
+- 簡易式: `SimpleThreeSnapshotWsiLearner.fit(..., result_known_at=...)` に発走30/15/5分前相当のオッズと過去の結果時刻を与え、`score(target_snapshots)` から時刻を付けた全馬シグナルを取得します。正式API `SimpleLeadingPredictionLambda().rank(..., captured_at=..., validation_loop=..., baseline_model=..., prediction_frozen_at=...)` もPRE_RACE固定を必須とします。`context.scheduled_start` は必須です。従来の市場バグ評価は別欄に残します。
 
-簡易式の3時点では期間14のWilder RSIは算出できません。算出可能な**期間2の短期RSI**を別特徴量として加え、既存の3時点変化・加速度と分けます。現在の9月13日の検証画像は単一時点オッズと手動順位だけのため、上記の学習条件を満たさず係数更新は実施していません。データ取得と永続化は別途必要で、コードは未検証の精度向上を約束しません。施行後の仮想予想は学習入力に使用できません。
+簡易式の3時点では期間14のWilder Strength Indexは算出できません。算出可能な**期間2の短期WSI**を別特徴量として加え、既存の3時点変化・加速度と分けます。現在の9月13日の検証画像は単一時点オッズと手動順位だけのため、上記の学習条件を満たさず係数更新は実施していません。データ取得と永続化は別途必要で、コードは未検証の精度向上を約束しません。施行後の仮想予想は学習入力に使用できません。
 
 ## RSI再帰的自己改善（Recursive Self-Improvement）
 
-相対力指数RSIとは別に、`RacingRecursiveImprovementGate("full")`と`RacingRecursiveImprovementGate("simple")`が本格型・簡易式を独立して世代管理します。候補設定、親世代、Gitコミットを凍結し、入力、現行予測、候補予測、候補マニフェストを発走前の試行記録へ書き込み禁止形式で固定します。後日判明した正式結果だけで評価し、試行記録とのハッシュ不一致は評価対象にできません。
+相対力指数（WSI）とは無関係に、`RacingRecursiveImprovementGate("full")`と`RacingRecursiveImprovementGate("simple")`が本格型・簡易式を独立して世代管理します。候補設定、親世代、Gitコミットを凍結し、入力、現行予測、候補予測、候補マニフェストを発走前の試行記録へ書き込み禁止形式で固定します。後日判明した正式結果だけで評価し、試行記録とのハッシュ不一致は評価対象にできません。
 
 各モード8レース以上についてBrier損失、上位3頭抽出、回収率、最大バグ検知の全条件が現行版以上の場合だけ`PROMOTION_PROPOSED`を生成します。合格案も人間承認用のPR候補に留まり、ソース変更、`main`マージ、賭けは自動実行しません。本格型の固定PCA比`0.10×直近 + 0.90×事前`は改善対象外で、本格型と簡易式の学習記録も混合できません。
 

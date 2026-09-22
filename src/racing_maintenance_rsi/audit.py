@@ -103,7 +103,7 @@ def _check_core(root: Path) -> list[AuditFinding]:
     required = (
         root / "src/racing_lambda/regularized_pca.py",
         root / "src/racing_lambda/full_leading_prediction_lambda.py",
-        root / "src/racing_lambda/rsi_self_learning.py",
+        root / "src/racing_lambda/wsi_self_learning.py",
         root / "src/racing_lambda/jra_official_free_ingestion.py",
         root / "src/racing_lambda/freeze.py",
         root / "src/racing_lambda/recursive_self_improvement.py",

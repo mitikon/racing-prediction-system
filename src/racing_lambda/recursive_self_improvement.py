@@ -22,9 +22,49 @@ RECURSIVE_SELF_IMPROVEMENT_VERSION = "racing-recursive-self-improvement-v2"
 FIXED_RECENT_CORRELATION_WEIGHT = 0.10
 FIXED_PRIOR_CORRELATION_WEIGHT = 0.90
 ALLOWED_PARAMETERS: Mapping[str, frozenset[str]] = {
-    "full": frozenset({"rsi_periods", "rsi_feature_set", "rsi_weight", "market_feature_set"}),
-    "simple": frozenset({"short_rsi_period", "rsi_feature_set", "rsi_weight", "odds_snapshot_minutes"}),
+    "full": frozenset(
+        {
+            "wsi_periods",
+            "wsi_feature_set",
+            "wsi_weight",
+            "market_feature_set",
+            # Pre-rename spellings ("RSI" here always meant Recursive
+            # Self-Improvement, never the Wilder Strength Index feature; earlier
+            # candidate parameters were still named after it). Already-sealed
+            # historical candidates are hash-locked and must load and verify
+            # exactly as originally written, so their parameter keys are never
+            # rewritten in place. New candidates always use the names above.
+            "rsi_periods",
+            "rsi_feature_set",
+            "rsi_weight",
+        }
+    ),
+    "simple": frozenset(
+        {
+            "short_wsi_period",
+            "wsi_feature_set",
+            "wsi_weight",
+            "odds_snapshot_minutes",
+            "short_rsi_period",
+            "rsi_feature_set",
+            "rsi_weight",
+        }
+    ),
 }
+LEGACY_PARAMETER_ALIASES: Mapping[str, str] = {
+    "rsi_periods": "wsi_periods",
+    "rsi_feature_set": "wsi_feature_set",
+    "rsi_weight": "wsi_weight",
+    "short_rsi_period": "short_wsi_period",
+}
+
+
+def canonicalize_parameter_keys(parameters: Mapping[str, object]) -> dict[str, object]:
+    """Map any pre-rename ``rsi_*`` parameter keys to ``wsi_*`` (Wilder Strength
+    Index). Used only when *deriving* a value from a parameters mapping - never
+    to rewrite an already-sealed, hash-locked candidate payload in place.
+    """
+    return {LEGACY_PARAMETER_ALIASES.get(key, key): value for key, value in parameters.items()}
 
 
 def _utc(value: datetime, name: str) -> datetime:

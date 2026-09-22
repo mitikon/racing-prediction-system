@@ -13,7 +13,7 @@ from .backtest import (
     builtin_backtest_cases_2026_09_06,
     run_frozen_backtest,
 )
-from .adaptive_rsi_bridge import AdaptiveRsiBridge, RsiBridgeObservation, RsiBridgeSummary
+from .adaptive_wsi_bridge import AdaptiveWsiBridge, WsiBridgeObservation, WsiBridgeSummary
 from .evaluation import EvaluationReport, evaluate_prediction
 from .freeze import freeze_prediction, load_frozen_prediction
 from .full_leading_prediction_lambda import (
@@ -58,14 +58,14 @@ from .schema import (
     RaceContext,
 )
 from .scoring import build_prediction
-from .rsi_self_learning import (
-    RACING_RSI_FEATURE_VERSION,
-    RACING_RSI_PERIODS,
-    RacingRsiOutcomeLearner,
-    RsiLearningSummary,
+from .wsi_self_learning import (
+    RACING_WSI_FEATURE_VERSION,
+    RACING_WSI_PERIODS,
+    RacingWsiOutcomeLearner,
+    WsiLearningSummary,
     build_result_labels,
-    calculate_support_rsi,
-    latest_rsi_state,
+    calculate_support_wsi,
+    latest_wsi_state,
 )
 from .recursive_self_improvement import (
     RECURSIVE_SELF_IMPROVEMENT_VERSION,
@@ -77,6 +77,7 @@ from .recursive_self_improvement import (
     RacingRsiCandidate,
     SequentialEvidence,
     candidate_manifest_digest,
+    canonicalize_parameter_keys,
     approved_parameters,
     approve_promotion,
     freeze_candidate as freeze_recursive_rsi_candidate,
@@ -95,12 +96,12 @@ from .controlled_rsi_validation import (
     TrialMetrics,
     payload_digest,
 )
-from .simple_realtime_rsi import (
+from .simple_realtime_wsi import (
     EXPECTED_MINUTES_BEFORE_START,
-    SIMPLE_RSI_THREE_SNAPSHOT_VERSION,
-    SimpleRealtimeRsiSignal,
-    SimpleRsiLearningSummary,
-    SimpleThreeSnapshotRsiLearner,
+    SIMPLE_WSI_THREE_SNAPSHOT_VERSION,
+    SimpleRealtimeWsiSignal,
+    SimpleWsiLearningSummary,
+    SimpleThreeSnapshotWsiLearner,
     build_three_snapshot_features,
     build_three_snapshot_training_frame,
 )
@@ -135,7 +136,7 @@ from .validation_2026_09_06 import (
 SimpleLeadingPredictionLambda = SimpleLeadingSignalLambdaV02
 
 __all__ = [
-    "AdaptiveRsiBridge",
+    "AdaptiveWsiBridge",
     "AggregateEvidence",
     "BugType",
     "ComponentWeights",
@@ -156,10 +157,10 @@ __all__ = [
     "PastRun",
     "PredictionRow",
     "RaceContext",
-    "RACING_RSI_FEATURE_VERSION",
-    "RsiBridgeObservation",
-    "RsiBridgeSummary",
-    "RACING_RSI_PERIODS",
+    "RACING_WSI_FEATURE_VERSION",
+    "WsiBridgeObservation",
+    "WsiBridgeSummary",
+    "RACING_WSI_PERIODS",
     "RECURSIVE_SELF_IMPROVEMENT_VERSION",
     "ControlledRsiValidationLoop",
     "ControlledPrediction",
@@ -169,8 +170,8 @@ __all__ = [
     "RacingPromotionReport",
     "RacingRecursiveImprovementGate",
     "RacingRsiCandidate",
-    "RacingRsiOutcomeLearner",
-    "RsiLearningSummary",
+    "RacingWsiOutcomeLearner",
+    "WsiLearningSummary",
     "SequentialEvidence",
     "RaceBacktestRow",
     "RaceDayHorseInput",
@@ -179,10 +180,10 @@ __all__ = [
     "RecordedRaceResult",
     "SIMPLE_LEADING_PREDICTION_NAME",
     "EXPECTED_MINUTES_BEFORE_START",
-    "SIMPLE_RSI_THREE_SNAPSHOT_VERSION",
-    "SimpleRealtimeRsiSignal",
-    "SimpleRsiLearningSummary",
-    "SimpleThreeSnapshotRsiLearner",
+    "SIMPLE_WSI_THREE_SNAPSHOT_VERSION",
+    "SimpleRealtimeWsiSignal",
+    "SimpleWsiLearningSummary",
+    "SimpleThreeSnapshotWsiLearner",
     "SimpleHorseFeatures",
     "SimpleLeadingPredictionLambda",
     "SimpleLeadingSignalLambdaV02",
@@ -201,8 +202,9 @@ __all__ = [
     "build_monthly_condition_stats",
     "build_prediction",
     "build_result_labels",
-    "calculate_support_rsi",
+    "calculate_support_wsi",
     "candidate_manifest_digest",
+    "canonicalize_parameter_keys",
     "approved_parameters",
     "approve_promotion",
     "build_snapshot_stats",
@@ -222,7 +224,7 @@ __all__ = [
     "ingest_snapshot_file",
     "load_frozen_prediction",
     "load_frozen_snapshot",
-    "latest_rsi_state",
+    "latest_wsi_state",
     "normalized_market_probabilities",
     "odds_snapshots_from_official",
     "pace_position_score",
