@@ -35,6 +35,27 @@ C_reg = 0.10 * C_recent + 0.90 * C_prior
 python -m pytest -q
 ```
 
+## RSI再帰的自己改善・自動学習ループ
+
+`racing-rsi-loop` は指定レースごとに次の処理を追記専用で実行します。
+
+1. 写真OCR・プロンプトから正規化された予想Top5を、発走前に`PRE_RACE`へFreeze保存
+2. 許可された経路から投入されたJRA公式結果（レースタイム、通過順位、最終オッズ、全馬着順）を`RESULT`へ保存
+3. 表示5頭の成績を`○/5`、実際の1〜3着カバーを`○/3`として評価
+4. 結果ラベルを`LEARNING/rsi_feedback.json`へ保存し、次回以降のRSI候補学習だけに使用
+5. GitHub Actionsが最新mainを`pull --ff-only`後、全テストを通して追記データをpush
+
+```bash
+racing-rsi-loop --root data/automated_loop freeze prediction.json
+racing-rsi-loop --root data/automated_loop settle prediction.json official_result.json
+```
+
+同一レースの予想再Freeze、結果再登録、Freeze内容と異なる予想での答え合わせは失敗終了します。フィードバック作成は自動ですが、RSI候補パラメータの昇格には8レース以上の将来検証と人間承認が必要です。JRA公式ページの自動巡回は行いません。
+
+### 公式結果の取得範囲
+
+`RaceDayCollectionPolicy`は24時間巡回せず、JRA開催日の9:00〜17:30（日本時間）だけ作動します。各開催競馬場の1R〜12Rを対象とし、障害競走、未確定結果、取得済みレースは除外します。発走予定時刻から5分以上経過し、結果状態が`official`になったレースだけを一度取得します。取得経路は許可されたJRA公式データ提供アダプターへ限定し、HTML変更時に誤った結果を学習させない構造です。
+
 ## 保守専用RSI
 
 予測用RSIとは完全に分離した`racing_maintenance_rsi`が、固定PCA比率、PRE_RACEとRESULTの分離、凍結予測の追記禁止、危険なコード、秘密情報、GitHub Actionsを監査します。
