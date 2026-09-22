@@ -16,6 +16,7 @@ from .recursive_self_improvement import (
     RacingRecursiveImprovementGate,
     RacingRsiCandidate,
     candidate_manifest_digest,
+    canonicalize_parameter_keys,
     approve_promotion,
     approved_parameters,
     freeze_candidate,
@@ -59,7 +60,11 @@ def _verify_candidate_parameters(candidate: RacingRsiCandidate, model: object) -
     actual = describe()
     if not isinstance(actual, Mapping):
         raise ValueError("candidate model RSI parameters must be a mapping")
-    for name, expected in candidate.parameters.items():
+    # A pre-rename candidate may still carry old wsi_* parameter keys spelled
+    # rsi_*; canonicalize before matching against the model's current (new
+    # spelling only) attestation. The candidate's own stored parameters dict
+    # is never rewritten - only this local comparison view.
+    for name, expected in canonicalize_parameter_keys(candidate.parameters).items():
         if name not in actual:
             raise ValueError(f"candidate parameter is not implemented by prediction path: {name}")
         if _plain(actual[name]) != _plain(expected):
@@ -156,10 +161,10 @@ class ControlledRsiValidationLoop:
         if self.candidate.mode != "full":
             raise ValueError("full prediction requires a full-mode RSI candidate")
         _verify_candidate_parameters(self.candidate, candidate_model)
-        if "rsi_weight" in self.candidate.parameters and getattr(
-            candidate_model, "rsi_learning_summary_", None
+        if "wsi_weight" in canonicalize_parameter_keys(self.candidate.parameters) and getattr(
+            candidate_model, "wsi_learning_summary_", None
         ) is None:
-            raise ValueError("full RSI weight candidate requires trained historical RSI")
+            raise ValueError("full RSI candidate configuring wsi_weight requires trained historical WSI")
         if not snapshots:
             raise ValueError("full prediction requires PRE_RACE snapshots")
         race_id = str(getattr(snapshots[0], "race_id", "")).strip()
@@ -203,8 +208,8 @@ class ControlledRsiValidationLoop:
         candidate_model: object,
         context: object,
         horses: Sequence[object],
-        baseline_rsi_signals: Sequence[object] | None,
-        candidate_rsi_signals: Sequence[object] | None,
+        baseline_wsi_signals: Sequence[object] | None,
+        candidate_wsi_signals: Sequence[object] | None,
         captured_at: datetime,
         prediction_frozen_at: datetime,
         registered_at: datetime | None = None,
@@ -224,13 +229,14 @@ class ControlledRsiValidationLoop:
             raise ValueError(
                 "simple prediction capture and freeze must precede scheduled_start"
             )
-        if float(self.candidate.parameters.get("rsi_weight", 0.0)) > 0 and not candidate_rsi_signals:
-            raise ValueError("simple RSI weight candidate requires current PRE_RACE RSI signals")
+        candidate_wsi_weight = canonicalize_parameter_keys(self.candidate.parameters).get("wsi_weight", 0.0)
+        if float(candidate_wsi_weight) > 0 and not candidate_wsi_signals:
+            raise ValueError("simple RSI candidate configuring wsi_weight requires current PRE_RACE WSI signals")
         baseline = baseline_model._rank_core(
-            context, horses, baseline_rsi_signals, captured_at=captured_at
+            context, horses, baseline_wsi_signals, captured_at=captured_at
         )
         candidate = candidate_model._rank_core(
-            context, horses, candidate_rsi_signals, captured_at=captured_at
+            context, horses, candidate_wsi_signals, captured_at=captured_at
         )
         trial = self.register_pre_race(
             race_id=race_id,
@@ -240,8 +246,8 @@ class ControlledRsiValidationLoop:
             input_payload={
                 "context": context,
                 "horses": horses,
-                "baseline_rsi_signals": baseline_rsi_signals or (),
-                "candidate_rsi_signals": candidate_rsi_signals or (),
+                "baseline_wsi_signals": baseline_wsi_signals or (),
+                "candidate_wsi_signals": candidate_wsi_signals or (),
             },
             baseline_prediction=baseline,
             candidate_prediction=candidate,

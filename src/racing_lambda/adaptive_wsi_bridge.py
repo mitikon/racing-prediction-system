@@ -1,7 +1,7 @@
-"""Time-ordered, fail-closed RSI/λ calibration shared by the two racing modes.
+"""Time-ordered, fail-closed WSI/λ calibration shared by the two racing modes.
 
 The inputs must be *recorded predictions*, not features rebuilt after a race.
-The last races are held out when choosing whether a learned RSI contribution
+The last races are held out when choosing whether a learned WSI contribution
 beats the original λ score. This never edits the PCA correlation ratio.
 """
 
@@ -17,7 +17,7 @@ Mode = Literal["full", "simple"]
 
 
 @dataclass(frozen=True)
-class RsiBridgeObservation:
+class WsiBridgeObservation:
     mode: Mode
     race_id: str
     horse_id: str
@@ -25,9 +25,9 @@ class RsiBridgeObservation:
     frozen_at: datetime
     scheduled_start: datetime
     result_known_at: datetime
-    rsi_trained_until: datetime
+    wsi_trained_until: datetime
     lambda_score: float
-    rsi_score: float
+    wsi_score: float
     top3: bool
 
     def __post_init__(self) -> None:
@@ -37,18 +37,18 @@ class RsiBridgeObservation:
             raise ValueError("top3 label must be a boolean")
         if not isinstance(self.field_size, int) or self.field_size < 5:
             raise ValueError("official field_size must be at least five")
-        times = (self.rsi_trained_until, self.frozen_at, self.scheduled_start, self.result_known_at)
+        times = (self.wsi_trained_until, self.frozen_at, self.scheduled_start, self.result_known_at)
         if any(time.tzinfo is None or time.utcoffset() is None for time in times):
             raise ValueError("all bridge timestamps must be timezone-aware")
         if not (times[0] < times[1] < times[2] <= times[3]):
-            raise ValueError("RSI training must precede freeze, start, and result")
+            raise ValueError("WSI training must precede freeze, start, and result")
         if any(not isfinite(float(value)) or not 0 <= value <= 1 for value in
-               (self.lambda_score, self.rsi_score)):
+               (self.lambda_score, self.wsi_score)):
             raise ValueError("bridge scores must be finite and in [0, 1]")
 
 
 @dataclass(frozen=True)
-class RsiBridgeSummary:
+class WsiBridgeSummary:
     mode: Mode
     training_races: int
     validation_races: int
@@ -58,11 +58,11 @@ class RsiBridgeSummary:
     weight: float
 
 
-class AdaptiveRsiBridge:
+class AdaptiveWsiBridge:
     """Learn a *score-mixing* weight independently for full or simple racing λ.
 
     The 0.10/0.90 full-mode PCA *correlation* regularization stays fixed.
-    The penalty here shrinks RSI contribution, and a chronological holdout
+    The penalty here shrinks WSI contribution, and a chronological holdout
     rejects any weight that fails to beat λ-only predictions.
     """
 
@@ -74,22 +74,22 @@ class AdaptiveRsiBridge:
         self.min_improvement = float(min_improvement)
 
     @staticmethod
-    def _loss(rows: Sequence[RsiBridgeObservation], weight: float) -> float:
-        return sum(((1 - weight) * row.lambda_score + weight * row.rsi_score -
+    def _loss(rows: Sequence[WsiBridgeObservation], weight: float) -> float:
+        return sum(((1 - weight) * row.lambda_score + weight * row.wsi_score -
                     float(row.top3)) ** 2 for row in rows) / len(rows)
 
-    def fit(self, observations: Sequence[RsiBridgeObservation], *, prediction_at: datetime) -> "AdaptiveRsiBridge":
+    def fit(self, observations: Sequence[WsiBridgeObservation], *, prediction_at: datetime) -> "AdaptiveWsiBridge":
         if prediction_at.tzinfo is None or prediction_at.utcoffset() is None:
             raise ValueError("prediction_at must be timezone-aware")
         if not observations or any(row.mode != self.mode for row in observations):
             raise ValueError("bridge observations must belong to one racing mode")
-        races: dict[str, list[RsiBridgeObservation]] = {}
+        races: dict[str, list[WsiBridgeObservation]] = {}
         for row in observations:
             if row.result_known_at >= prediction_at:
-                raise ValueError("same-race or future results cannot train RSI bridge")
+                raise ValueError("same-race or future results cannot train WSI bridge")
             races.setdefault(row.race_id, []).append(row)
         if len(races) < self.min_races:
-            raise ValueError("insufficient distinct frozen races for RSI bridge")
+            raise ValueError("insufficient distinct frozen races for WSI bridge")
         for race_id, rows in races.items():
             if (len(rows) != rows[0].field_size or
                     any(row.field_size != len(rows) for row in rows) or
@@ -110,7 +110,7 @@ class AdaptiveRsiBridge:
         train = [row for race in train_races for row in race]
         validation = [row for race in validation_races for row in race]
         candidates = [round(index * 0.05, 2) for index in range(11)]
-        # Training objective regularizes large RSI weights. Validation decides adoption.
+        # Training objective regularizes large WSI weights. Validation decides adoption.
         proposed = min(candidates, key=lambda weight: (self._loss(train, weight) +
                        0.02 * weight * weight, weight))
         baseline = self._loss(validation, 0.0)
@@ -118,7 +118,7 @@ class AdaptiveRsiBridge:
         adopted = proposed > 0 and baseline - candidate >= self.min_improvement
         self.weight_ = proposed if adopted else 0.0
         self.trained_through_ = max(row.result_known_at for row in observations)
-        self.summary_ = RsiBridgeSummary(
+        self.summary_ = WsiBridgeSummary(
             mode=self.mode, training_races=len(train_races),
             validation_races=len(validation_races),
             baseline_validation_mse=baseline,
@@ -127,11 +127,11 @@ class AdaptiveRsiBridge:
         )
         return self
 
-    def blend(self, lambda_score: float, rsi_score: float, *, captured_at: datetime) -> float:
+    def blend(self, lambda_score: float, wsi_score: float, *, captured_at: datetime) -> float:
         if not hasattr(self, "summary_"):
-            raise RuntimeError("RSI bridge must be fit before scoring")
+            raise RuntimeError("WSI bridge must be fit before scoring")
         if captured_at.tzinfo is None or captured_at.utcoffset() is None or captured_at <= self.trained_through_:
-            raise ValueError("target input must follow all RSI bridge training results")
-        if any(not isfinite(float(value)) or not 0 <= value <= 1 for value in (lambda_score, rsi_score)):
+            raise ValueError("target input must follow all WSI bridge training results")
+        if any(not isfinite(float(value)) or not 0 <= value <= 1 for value in (lambda_score, wsi_score)):
             raise ValueError("bridge scores must be finite and in [0, 1]")
-        return (1 - self.weight_) * float(lambda_score) + self.weight_ * float(rsi_score)
+        return (1 - self.weight_) * float(lambda_score) + self.weight_ * float(wsi_score)

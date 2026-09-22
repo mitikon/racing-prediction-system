@@ -13,8 +13,8 @@ from enum import Enum
 from math import exp
 from typing import Mapping, Sequence
 
-from .adaptive_rsi_bridge import AdaptiveRsiBridge, RsiBridgeObservation
-from .simple_realtime_rsi import SimpleRealtimeRsiSignal
+from .adaptive_wsi_bridge import AdaptiveWsiBridge, WsiBridgeObservation
+from .simple_realtime_wsi import SimpleRealtimeWsiSignal
 
 
 class Going(str, Enum):
@@ -111,10 +111,10 @@ class SimpleScoreBreakdown:
     corroborating_axes: tuple[str, ...]
     bug_type: BugType
     maximum_bug_eligible: bool
-    realtime_rsi_top3_probability: float | None = None
-    realtime_rsi_bug_score: float | None = None
-    realtime_rsi_used: bool = False
-    adaptive_rsi_weight: float | None = None
+    realtime_wsi_top3_probability: float | None = None
+    realtime_wsi_bug_score: float | None = None
+    realtime_wsi_used: bool = False
+    adaptive_wsi_weight: float | None = None
 
 
 @dataclass(frozen=True)
@@ -136,36 +136,36 @@ class SimpleLeadingSignalLambdaV02:
         "odds_signal": 0.10,
     }
 
-    def __init__(self, *, rsi_weight: float = 0.0) -> None:
-        if not 0.0 <= rsi_weight <= 0.5:
-            raise ValueError("rsi_weight must be between 0 and 0.5")
-        self.rsi_weight = float(rsi_weight)
-        self.adaptive_rsi_bridge: AdaptiveRsiBridge | None = None
+    def __init__(self, *, wsi_weight: float = 0.0) -> None:
+        if not 0.0 <= wsi_weight <= 0.5:
+            raise ValueError("wsi_weight must be between 0 and 0.5")
+        self.wsi_weight = float(wsi_weight)
+        self.adaptive_wsi_bridge: AdaptiveWsiBridge | None = None
 
     def rsi_candidate_parameters(self) -> dict[str, object]:
         """Parameters this prediction path can actually apply and attest."""
-        return {"rsi_weight": self.rsi_weight}
+        return {"wsi_weight": self.wsi_weight}
 
-    def fit_rsi_bridge(
-        self, observations: Sequence[RsiBridgeObservation], *, prediction_at: datetime
+    def fit_wsi_bridge(
+        self, observations: Sequence[WsiBridgeObservation], *, prediction_at: datetime
     ) -> "SimpleLeadingSignalLambdaV02":
-        """Learn the *overall* RSI contribution from dated simple-mode predictions."""
-        candidate = AdaptiveRsiBridge("simple").fit(observations, prediction_at=prediction_at)
-        self.adaptive_rsi_bridge = candidate
+        """Learn the *overall* WSI contribution from dated simple-mode predictions."""
+        candidate = AdaptiveWsiBridge("simple").fit(observations, prediction_at=prediction_at)
+        self.adaptive_wsi_bridge = candidate
         return self
 
     def rank(
         self,
         context: SimpleRaceContext,
         horses: Sequence[SimpleHorseFeatures],
-        realtime_rsi_signals: Sequence[SimpleRealtimeRsiSignal] | None = None,
+        realtime_wsi_signals: Sequence[SimpleRealtimeWsiSignal] | None = None,
         *,
         captured_at: datetime,
         validation_loop,
         baseline_model: "SimpleLeadingSignalLambdaV02",
         prediction_frozen_at: datetime,
         registered_at: datetime | None = None,
-        baseline_rsi_signals: Sequence[SimpleRealtimeRsiSignal] | None = None,
+        baseline_wsi_signals: Sequence[SimpleRealtimeWsiSignal] | None = None,
     ):
         """Official 簡易式先行予測λ entry point; PRE_RACE freeze is mandatory."""
         from .controlled_rsi_validation import ControlledRsiValidationLoop
@@ -179,8 +179,8 @@ class SimpleLeadingSignalLambdaV02:
             candidate_model=self,
             context=context,
             horses=horses,
-            baseline_rsi_signals=baseline_rsi_signals,
-            candidate_rsi_signals=realtime_rsi_signals,
+            baseline_wsi_signals=baseline_wsi_signals,
+            candidate_wsi_signals=realtime_wsi_signals,
             captured_at=captured_at,
             prediction_frozen_at=prediction_frozen_at,
             registered_at=registered_at,
@@ -190,20 +190,20 @@ class SimpleLeadingSignalLambdaV02:
         self,
         context: SimpleRaceContext,
         horses: Sequence[SimpleHorseFeatures],
-        realtime_rsi_signals: Sequence[SimpleRealtimeRsiSignal] | None = None,
+        realtime_wsi_signals: Sequence[SimpleRealtimeWsiSignal] | None = None,
         *,
         captured_at: datetime | None = None,
     ) -> SimplePredictionOutput:
         """Unattested research ranking; never valid as an official prediction."""
         return self._rank_core(
-            context, horses, realtime_rsi_signals, captured_at=captured_at
+            context, horses, realtime_wsi_signals, captured_at=captured_at
         )
 
     def _rank_core(
         self,
         context: SimpleRaceContext,
         horses: Sequence[SimpleHorseFeatures],
-        realtime_rsi_signals: Sequence[SimpleRealtimeRsiSignal] | None = None,
+        realtime_wsi_signals: Sequence[SimpleRealtimeWsiSignal] | None = None,
         *,
         captured_at: datetime | None = None,
     ) -> SimplePredictionOutput:
@@ -213,25 +213,25 @@ class SimpleLeadingSignalLambdaV02:
         if len(horse_ids) != len(set(horse_ids)):
             raise ValueError("horse_id values must be unique")
 
-        rsi_map = {
-            signal.horse_id: signal for signal in (realtime_rsi_signals or ())
+        wsi_map = {
+            signal.horse_id: signal for signal in (realtime_wsi_signals or ())
         }
-        unknown = set(rsi_map) - set(horse_ids)
+        unknown = set(wsi_map) - set(horse_ids)
         if unknown:
-            raise ValueError(f"realtime RSI contains unknown horse_ids: {sorted(unknown)}")
-        bridge = self.adaptive_rsi_bridge
-        if bridge is not None or self.rsi_weight > 0:
-            if set(rsi_map) != set(horse_ids):
-                raise ValueError("adaptive RSI requires all runners' three-snapshot signals")
+            raise ValueError(f"realtime WSI contains unknown horse_ids: {sorted(unknown)}")
+        bridge = self.adaptive_wsi_bridge
+        if bridge is not None or self.wsi_weight > 0:
+            if set(wsi_map) != set(horse_ids):
+                raise ValueError("adaptive WSI requires all runners' three-snapshot signals")
             if captured_at is None or captured_at.tzinfo is None or captured_at.utcoffset() is None:
-                raise ValueError("adaptive RSI requires timezone-aware captured_at")
+                raise ValueError("adaptive WSI requires timezone-aware captured_at")
             if (context.scheduled_start is None or context.scheduled_start.tzinfo is None
                     or context.scheduled_start.utcoffset() is None or captured_at >= context.scheduled_start):
-                raise ValueError("adaptive RSI requires a future scheduled_start")
+                raise ValueError("adaptive WSI requires a future scheduled_start")
             if any(signal.snapshot_count != 3 or signal.captured_at != captured_at or
                    signal.trained_until is None or signal.trained_until >= captured_at
-                   for signal in rsi_map.values()):
-                raise ValueError("adaptive RSI needs dated, prior-trained three-snapshot signals")
+                   for signal in wsi_map.values()):
+                raise ValueError("adaptive WSI needs dated, prior-trained three-snapshot signals")
 
         raw = [self._fundamental_scores(context, horse) for horse in horses]
         fair_probabilities = self._softmax_probabilities(
@@ -244,7 +244,7 @@ class SimpleLeadingSignalLambdaV02:
             market_probability = market_probabilities[horse.horse_id]
             value_gap = fair_probability - market_probability
             base_odds_signal = self._odds_signal(value_gap, market_probability)
-            realtime = rsi_map.get(horse.horse_id)
+            realtime = wsi_map.get(horse.horse_id)
             odds_signal = (
                 0.40 * base_odds_signal + 0.60 * realtime.bug_score
                 if realtime is not None and bridge is None else base_odds_signal
@@ -270,10 +270,10 @@ class SimpleLeadingSignalLambdaV02:
             )
             if bridge is not None and realtime is not None and captured_at is not None:
                 overall = bridge.blend(overall, realtime.top3_probability, captured_at=captured_at)
-            elif self.rsi_weight > 0 and realtime is not None:
+            elif self.wsi_weight > 0 and realtime is not None:
                 overall = (
-                    (1.0 - self.rsi_weight) * overall
-                    + self.rsi_weight * realtime.top3_probability
+                    (1.0 - self.wsi_weight) * overall
+                    + self.wsi_weight * realtime.top3_probability
                 )
             scored.append(
                 SimpleScoreBreakdown(
@@ -291,16 +291,16 @@ class SimpleLeadingSignalLambdaV02:
                     corroborating_axes=axes,
                     bug_type=bug_type,
                     maximum_bug_eligible=maximum_eligible,
-                    realtime_rsi_top3_probability=(
+                    realtime_wsi_top3_probability=(
                         round(realtime.top3_probability, 8) if realtime is not None else None
                     ),
-                    realtime_rsi_bug_score=(
+                    realtime_wsi_bug_score=(
                         round(realtime.bug_score, 8) if realtime is not None else None
                     ),
-                    realtime_rsi_used=realtime is not None,
-                    adaptive_rsi_weight=(
+                    realtime_wsi_used=realtime is not None,
+                    adaptive_wsi_weight=(
                         bridge.weight_ if bridge is not None
-                        else self.rsi_weight if realtime is not None else None
+                        else self.wsi_weight if realtime is not None else None
                     ),
                 )
             )
@@ -312,7 +312,7 @@ class SimpleLeadingSignalLambdaV02:
             sorted(
                 (item for item in scored if item.maximum_bug_eligible),
                 key=lambda item: (
-                    -float(item.realtime_rsi_bug_score or 0.0),
+                    -float(item.realtime_wsi_bug_score or 0.0),
                     -item.value_gap,
                     -item.overall,
                     item.horse_id,

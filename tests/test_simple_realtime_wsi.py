@@ -11,9 +11,9 @@ from racing_lambda.simple_leading_signal_v02 import (
     SimpleLeadingSignalLambdaV02,
     SimpleRaceContext,
 )
-from racing_lambda.simple_realtime_rsi import (
-    SimpleRealtimeRsiSignal,
-    SimpleThreeSnapshotRsiLearner,
+from racing_lambda.simple_realtime_wsi import (
+    SimpleRealtimeWsiSignal,
+    SimpleThreeSnapshotWsiLearner,
     build_three_snapshot_features,
 )
 
@@ -71,11 +71,11 @@ def test_three_snapshot_features_require_exactly_three_points_per_horse():
     rows = _race_snapshots("R1")
     features = build_three_snapshot_features(rows)
     assert set(features.index) == {"1", "2", "3", "4"}
-    assert "simple_rsi_win_change_30_to_5" in features.columns
-    assert "simple_rsi2_win_level" in features.columns
-    assert 0.0 <= features.loc["1", "simple_rsi2_win_level"] <= 1.0
-    assert "simple_rsi_trifecta_acceleration" in features.columns
-    assert "simple_rsi_cross_ticket_change_std" in features.columns
+    assert "simple_wsi_win_change_30_to_5" in features.columns
+    assert "simple_wsi2_win_level" in features.columns
+    assert 0.0 <= features.loc["1", "simple_wsi2_win_level"] <= 1.0
+    assert "simple_wsi_trifecta_acceleration" in features.columns
+    assert "simple_wsi_cross_ticket_change_std" in features.columns
 
 
 def test_three_snapshot_learner_uses_only_completed_historical_labels():
@@ -89,7 +89,7 @@ def test_three_snapshot_learner_uses_only_completed_historical_labels():
         OfficialResult("R2", ("3", "1", "4", "2")),
         OfficialResult("R3", ("1", "2", "3", "4")),
     ]
-    learner = SimpleThreeSnapshotRsiLearner(ridge=1.0).fit(races, results)
+    learner = SimpleThreeSnapshotWsiLearner(ridge=1.0).fit(races, results)
     scored = learner.score(_race_snapshots("LIVE", 0.004), scheduled_start=RACE_START)
     assert len(scored) == 4
     assert all(0.0 <= row.top3_probability <= 1.0 for row in scored)
@@ -100,12 +100,12 @@ def test_three_snapshot_learner_uses_only_completed_historical_labels():
 def test_simple_scoring_rejects_wrong_or_post_start_capture_times():
     races = [_race_snapshots(f"R{i}", 0.003 * i) for i in range(3)]
     results = [OfficialResult(f"R{i}", ("1", "2", "3", "4")) for i in range(3)]
-    learner = SimpleThreeSnapshotRsiLearner().fit(races, results)
+    learner = SimpleThreeSnapshotWsiLearner().fit(races, results)
     with pytest.raises(ValueError, match="30/15/5"):
         learner.score(_race_snapshots("LIVE"), scheduled_start=RACE_START + timedelta(minutes=5))
 
 
-def test_simple_lambda_accepts_three_snapshot_rsi_as_optional_market_layer():
+def test_simple_lambda_accepts_three_snapshot_wsi_as_optional_market_layer():
     context = SimpleRaceContext(
         race_id="LIVE",
         surface="芝",
@@ -117,26 +117,26 @@ def test_simple_lambda_accepts_three_snapshot_rsi_as_optional_market_layer():
     )
     baseline = SimpleLeadingSignalLambdaV02().rank_research(context, _horses())
     live_signals = [
-        SimpleRealtimeRsiSignal("1", 0.88, 0.91, 12),
-        SimpleRealtimeRsiSignal("2", 0.30, 0.20, 12),
-        SimpleRealtimeRsiSignal("3", 0.75, 0.80, 12),
-        SimpleRealtimeRsiSignal("4", 0.15, 0.10, 12),
+        SimpleRealtimeWsiSignal("1", 0.88, 0.91, 12),
+        SimpleRealtimeWsiSignal("2", 0.30, 0.20, 12),
+        SimpleRealtimeWsiSignal("3", 0.75, 0.80, 12),
+        SimpleRealtimeWsiSignal("4", 0.15, 0.10, 12),
     ]
     enriched = SimpleLeadingSignalLambdaV02().rank_research(
-        context, _horses(), realtime_rsi_signals=live_signals
+        context, _horses(), realtime_wsi_signals=live_signals
     )
-    assert not any(row.realtime_rsi_used for row in baseline.lambda_overall_final)
-    assert all(row.realtime_rsi_used for row in enriched.lambda_overall_final)
+    assert not any(row.realtime_wsi_used for row in baseline.lambda_overall_final)
+    assert all(row.realtime_wsi_used for row in enriched.lambda_overall_final)
     one = next(row for row in enriched.lambda_overall_final if row.horse_id == "1")
-    assert one.realtime_rsi_bug_score == 0.91
+    assert one.realtime_wsi_bug_score == 0.91
     assert "3時点全券種オッズ変動" in one.corroborating_axes
 
 
-def test_dated_simple_rsi_training_flows_directly_to_lambda_without_future_result():
+def test_dated_simple_wsi_training_flows_directly_to_lambda_without_future_result():
     races = [_race_snapshots(f"R{i}", 0.003 * i) for i in range(3)]
     results = [OfficialResult(f"R{i}", ("1", "2", "3", "4")) for i in range(3)]
     known_at = datetime(2026, 9, 13, 6, tzinfo=timezone.utc)
-    learner = SimpleThreeSnapshotRsiLearner().fit(
+    learner = SimpleThreeSnapshotWsiLearner().fit(
         races, results,
         result_known_at={f"R{i}": known_at for i in range(3)},
     )
@@ -146,7 +146,7 @@ def test_dated_simple_rsi_training_flows_directly_to_lambda_without_future_resul
     signals = learner.score(tomorrow, scheduled_start=RACE_START + timedelta(days=1))
     assert all(row.trained_until == known_at and row.snapshot_count == 3
                for row in signals)
-    with pytest.raises(ValueError, match="dated RSI training results"):
+    with pytest.raises(ValueError, match="dated WSI training results"):
         learner.score(_race_snapshots("TARGET"), scheduled_start=RACE_START)
     with pytest.raises(ValueError, match="target race"):
         learner.score(_race_snapshots("R0"), scheduled_start=RACE_START)

@@ -9,6 +9,7 @@ from racing_lambda import (
     RacingRecursiveImprovementGate,
     RacingRsiCandidate,
     candidate_manifest_digest,
+    canonicalize_parameter_keys,
     freeze_recursive_rsi_candidate,
     freeze_recursive_rsi_report,
     freeze_recursive_rsi_trial,
@@ -98,6 +99,27 @@ def test_each_mode_can_propose_only_future_improvement(mode):
     assert all(report.gates.values())
     assert report.to_dict()["human_approval_required"] is True
     assert report.to_dict()["betting_authority"] is False
+
+
+def test_pre_rename_rsi_keys_canonicalize_to_wsi_without_dropping_values():
+    """rsi_* parameter keys predate the WSI (Wilder Strength Index) rename;
+    RSI itself has only ever meant Recursive Self-Improvement. Already-sealed
+    candidates keep their original keys (hash-locked); only *derived* reads
+    go through this canonicalization.
+    """
+    legacy = {"rsi_periods": [5, 14], "rsi_feature_set": ["level"], "rsi_weight": 0.3, "feature_lags": 5}
+    canonical = canonicalize_parameter_keys(legacy)
+    assert canonical == {
+        "wsi_periods": [5, 14],
+        "wsi_feature_set": ["level"],
+        "wsi_weight": 0.3,
+        "feature_lags": 5,
+    }
+    # A pre-rename candidate (rsi_weight) still validates: ALLOWED_PARAMETERS
+    # accepts both spellings so hash-locked historical candidates are never
+    # rewritten in place.
+    legacy_candidate = candidate(parameters={"rsi_weight": 0.3})
+    assert legacy_candidate.parameters == {"rsi_weight": 0.3}
 
 
 def test_harmful_candidate_is_rejected():

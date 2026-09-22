@@ -38,7 +38,7 @@ def test_september_13_audit_counts_exactly_three_excluded_podium_horses():
     assert all(row["cause_status"] == "unverified" for row in audit["excluded_podium_horses"])
     assert len(audit["next_race_training_labels"]) == sum(len(r["pre_race_order"]) for r in races)
     assert sum(row["top3_result_label"] for row in audit["next_race_training_labels"]) == 15
-    assert audit["rsi_training"]["performed"] is False
+    assert audit["wsi_training"]["performed"] is False
     assert audit["weight_changes"] == []
 
 
@@ -80,7 +80,7 @@ def test_september_20_published_rankings_become_next_race_evidence_only():
         "effective_from": "next_race_only",
         "scope": "published_horses_and_podium_exclusions",
     }
-    assert audit["rsi_training"]["performed"] is False
+    assert audit["wsi_training"]["performed"] is False
     assert audit["promotion_status"] == "NOT_EVALUABLE"
     assert audit["weight_changes"] == []
     assert [

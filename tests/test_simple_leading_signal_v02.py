@@ -12,14 +12,14 @@ from racing_lambda import (
 )
 
 
-def test_realtime_rsi_signal_type_hints_resolve():
+def test_realtime_wsi_signal_type_hints_resolve():
     # simple_leading_signal_v02 annotates several parameters with
-    # SimpleRealtimeRsiSignal (from simple_realtime_rsi) without importing it.
+    # SimpleRealtimeWsiSignal (from simple_realtime_wsi) without importing it.
     # `from __future__ import annotations` hides this at call time, but
     # typing.get_type_hints() (used by type checkers, docs tooling, and any
     # future runtime introspection) raises NameError unless it is imported.
     hints = typing.get_type_hints(SimpleLeadingSignalLambdaV02.rank)
-    assert "SimpleRealtimeRsiSignal" in str(hints["realtime_rsi_signals"])
+    assert "SimpleRealtimeWsiSignal" in str(hints["realtime_wsi_signals"])
 
 
 def horse(
