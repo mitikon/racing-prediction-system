@@ -7,6 +7,20 @@
 - **簡易式先行予測λ** = `SimpleLeadingPredictionLambda`
 - **部分空間正則化PCA＋先行シグナル予測λ（米国株式市場）** は別リポジトリ `mitikonpro` で管理し、このリポジトリには含めません。
 
+## 予想4頭抽出方式（PCA非依存の新方式）
+
+`four_horse_extraction.py`は、本格・簡易式λが使う部分空間正則化PCA（`C_reg = 0.10 * C_recent + 0.90 * C_prior`）とは完全に独立した予想方式です。実戦検証で「1着4着」「3着4着」のような僅差の券外が繰り返し発生したことを受けて追加しました。
+
+- **入力**: 出馬表・成績欄の写真、または対象レースを指定したプロンプト
+- **予想の生成**: 定量式では計算しません。写真・プロンプトを読んだ人間またはLLMが直接判断し、ちょうど4頭を順位付きで抽出します
+- **このモジュールの役割**: 生成された4頭を発走前に`open("x")`で排他的に凍結保存し、結果判明後に馬連・ワイド・三連複・三連単それぞれの機械的な的中判定と、「予想した馬が実際には4着だった」ような僅差の取りこぼしを`near_miss_horses`として定量記録します
+- 既存の`verification_room.py`（Top5方式）とは別ファイル名・別スキーマで並行運用し、同一レースで両方式の実戦成績を比較できます
+- 本格・簡易式λの既存コード・固定係数（0.10／0.90）は変更していません。どちらの方式が実戦で優れるかは、今後の検証室データの蓄積で判断します
+
+```bash
+python -m pytest tests/test_four_horse_extraction.py
+```
+
 ## 「RSI」と「WSI」の定義
 
 このリポジトリで「RSI」という略称は**Recursive Self-Improvement（再帰的自己改善）**のみを指します（`recursive_self_improvement.py`の`RacingRecursiveImprovementGate`・`racing_maintenance_rsi`など）。相対力指数（Relative Strength Index、Wilderの計算式）は**WSI（Wilder Strength Index）**と呼び分け、`wsi_self_learning.py`・`simple_realtime_wsi.py`・`adaptive_wsi_bridge.py`に実装します。コード・変数名・README・テストで「RSI」と「WSI」を混同しません。
