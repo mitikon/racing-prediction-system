@@ -20,6 +20,18 @@
 python -m pytest tests/test_four_horse_extraction.py
 ```
 
+## オッズ急変動アラート（仮説段階）
+
+`odds_movement_alert.py`は、発走前オッズと最終（投票締切時）オッズを比較し、**±10%以上**動いた馬を機械的に検出します（2026-09-19阪神10R・1着12番、発走前約130倍→最終248.9倍の実例を契機に追加）。
+
+- これは「当たる根拠」として確立した指標ではなく、**仮説として都度記録する検討材料**です
+- 予測ロジック（予想4頭抽出方式）には自動接続していません。十分な件数の実レースで勝敗との関係を検証するまでは接続しません
+- オッズ情報を共有いただくたび、この基準に該当する馬があれば直ちに報告します
+
+```bash
+python -m pytest tests/test_odds_movement_alert.py
+```
+
 ## 「RSI」の定義
 
 このリポジトリで「RSI」という略称は`racing_maintenance_rsi`（保守専用RSI: コード整合性・秘密情報・危険なコードパターン・GitHub Actionsの監査）だけを指します。相対力指数（Relative Strength Index、Wilderの計算式）は**WSI（Wilder Strength Index）**と呼び分け、`wsi_self_learning.py`に実装します。かつて存在した予測パラメータ昇格用のRSI（再帰的自己改善）は、対象パラメータ（本格・簡易式λ）ごと2026-09-23に削除しました。

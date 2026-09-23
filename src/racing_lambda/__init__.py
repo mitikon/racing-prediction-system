@@ -26,6 +26,12 @@ from .four_horse_extraction import (
     settle_four_horse_extraction,
 )
 from .freeze import freeze_prediction, load_frozen_prediction
+from .odds_movement_alert import (
+    SUDDEN_MOVEMENT_THRESHOLD,
+    OddsMovementAlert,
+    detect_sudden_odds_movement,
+    scan_field_for_sudden_movement,
+)
 from .jra_official_free_ingestion import (
     OfficialSnapshot,
     freeze_snapshot,
@@ -98,6 +104,7 @@ __all__ = [
     "MonthlyConditionStats",
     "MonthlySnapshot",
     "OddsDistortion",
+    "OddsMovementAlert",
     "OfficialResult",
     "OfficialSnapshot",
     "PastRun",
@@ -113,6 +120,7 @@ __all__ = [
     "RecordedRaceResult",
     "StatisticalLeadingSignal",
     "StatisticalSignalInput",
+    "SUDDEN_MOVEMENT_THRESHOLD",
     "ThreeRaceValidationReport",
     "TwoLayerSignal",
     "VALIDATION_RECORDS_2026_09_06",
@@ -126,6 +134,7 @@ __all__ = [
     "builtin_backtest_cases_2026_09_06",
     "calculate_support_wsi",
     "combine_two_layers",
+    "detect_sudden_odds_movement",
     "evaluate_four_horse_extraction",
     "evaluate_prediction",
     "freeze_four_horse_extraction",
@@ -141,6 +150,7 @@ __all__ = [
     "rank_odds_distortion",
     "recent_form_score",
     "run_frozen_backtest",
+    "scan_field_for_sudden_movement",
     "settle_four_horse_extraction",
     "validate_record",
     "validation_summary_2026_09_06",
