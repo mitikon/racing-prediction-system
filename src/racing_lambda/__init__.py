@@ -1,9 +1,10 @@
 """Auditable horse-racing prediction components.
 
-Naming from 2026-09-09:
-- 本格先行予測λ = FullLeadingPredictionLambda
-- 簡易式先行予測λ = SimpleLeadingPredictionLambda
-- 先行シグナル予測λ remains the separate 部分空間正則化PCA project.
+Naming from 2026-09-23:
+- 予想4頭抽出方式 = 写真・プロンプト直接判断による新方式（`four_horse_extraction.py`）
+- 本格先行予測λ・簡易式先行予測λ・部分空間正則化PCAは実戦成績の悪化を受けて
+  2026-09-23に完全削除した。残す判断をした汎用基盤（データ収集・オッズ・
+  トリガミ・WSI自己学習・保守専用RSI等）だけが引き続きここにある。
 """
 
 from .backtest import (
@@ -13,15 +14,23 @@ from .backtest import (
     builtin_backtest_cases_2026_09_06,
     run_frozen_backtest,
 )
-from .adaptive_wsi_bridge import AdaptiveWsiBridge, WsiBridgeObservation, WsiBridgeSummary
 from .evaluation import EvaluationReport, evaluate_prediction
+from .four_horse_extraction import (
+    EXTRACTION_COUNT,
+    EXTRACTION_METHOD,
+    ExtractionEvaluation,
+    ExtractionResult,
+    FourHorseExtraction,
+    evaluate_four_horse_extraction,
+    freeze_four_horse_extraction,
+    settle_four_horse_extraction,
+)
 from .freeze import freeze_prediction, load_frozen_prediction
-from .full_leading_prediction_lambda import (
-    FULL_LEADING_PREDICTION_NAME,
-    SIMPLE_LEADING_PREDICTION_NAME,
-    FullLeadingPredictionLambda,
-    build_jra_training_frame,
-    odds_snapshots_from_official,
+from .odds_movement_alert import (
+    SUDDEN_MOVEMENT_THRESHOLD,
+    OddsMovementAlert,
+    detect_sudden_odds_movement,
+    scan_field_for_sudden_movement,
 )
 from .jra_official_free_ingestion import (
     OfficialSnapshot,
@@ -58,6 +67,8 @@ from .schema import (
     RaceContext,
 )
 from .scoring import build_prediction
+from .statistical_leading_signal import StatisticalLeadingSignal, StatisticalSignalInput
+from .two_layer_leading_signal import TwoLayerSignal, combine_two_layers
 from .wsi_self_learning import (
     RACING_WSI_FEATURE_VERSION,
     RACING_WSI_PERIODS,
@@ -66,61 +77,6 @@ from .wsi_self_learning import (
     build_result_labels,
     calculate_support_wsi,
     latest_wsi_state,
-)
-from .recursive_self_improvement import (
-    RECURSIVE_SELF_IMPROVEMENT_VERSION,
-    RacingFutureEvaluation,
-    RacingFrozenTrial,
-    RacingHumanApproval,
-    RacingPromotionReport,
-    RacingRecursiveImprovementGate,
-    RacingRsiCandidate,
-    SequentialEvidence,
-    candidate_manifest_digest,
-    canonicalize_parameter_keys,
-    approved_parameters,
-    approve_promotion,
-    freeze_candidate as freeze_recursive_rsi_candidate,
-    freeze_human_approval as freeze_recursive_rsi_approval,
-    freeze_trial as freeze_recursive_rsi_trial,
-    freeze_promotion_report as freeze_recursive_rsi_report,
-    parameter_manifest_digest,
-    sequential_loss_improvement_test,
-    trial_manifest_digest,
-    validate_successor as validate_recursive_rsi_successor,
-    verify_promotion_report,
-)
-from .controlled_rsi_validation import (
-    ControlledPrediction,
-    ControlledRsiValidationLoop,
-    TrialMetrics,
-    payload_digest,
-)
-from .simple_realtime_wsi import (
-    EXPECTED_MINUTES_BEFORE_START,
-    SIMPLE_WSI_THREE_SNAPSHOT_VERSION,
-    SimpleRealtimeWsiSignal,
-    SimpleWsiLearningSummary,
-    SimpleThreeSnapshotWsiLearner,
-    build_three_snapshot_features,
-    build_three_snapshot_training_frame,
-)
-from .simple_leading_signal_v02 import (
-    BugType,
-    Going,
-    SimpleHorseFeatures,
-    SimpleLeadingSignalLambdaV02,
-    SimplePredictionOutput,
-    SimpleRaceContext,
-    SimpleScoreBreakdown,
-)
-from .verification_room import (
-    VerificationEvaluation,
-    VerificationPrediction,
-    VerificationResult,
-    evaluate_verification,
-    freeze_verification_prediction,
-    settle_verification_result,
 )
 from .validation_2026_09_06 import (
     RecordedFrozenPrediction,
@@ -131,20 +87,16 @@ from .validation_2026_09_06 import (
     validation_summary_2026_09_06,
 )
 
-# New explicit public name. Keep the old class exported for backward compatibility
-# so existing frozen tests and historical comparisons do not change behavior.
-SimpleLeadingPredictionLambda = SimpleLeadingSignalLambdaV02
-
 __all__ = [
-    "AdaptiveWsiBridge",
     "AggregateEvidence",
-    "BugType",
     "ComponentWeights",
     "EvaluationReport",
-    "FULL_LEADING_PREDICTION_NAME",
+    "EXTRACTION_COUNT",
+    "EXTRACTION_METHOD",
+    "ExtractionEvaluation",
+    "ExtractionResult",
+    "FourHorseExtraction",
     "FrozenRaceCase",
-    "FullLeadingPredictionLambda",
-    "Going",
     "HorseEntry",
     "HorseMonthlyEvidence",
     "LeadingSignalPolicy",
@@ -152,92 +104,54 @@ __all__ = [
     "MonthlyConditionStats",
     "MonthlySnapshot",
     "OddsDistortion",
+    "OddsMovementAlert",
     "OfficialResult",
     "OfficialSnapshot",
     "PastRun",
     "PredictionRow",
     "RaceContext",
     "RACING_WSI_FEATURE_VERSION",
-    "WsiBridgeObservation",
-    "WsiBridgeSummary",
     "RACING_WSI_PERIODS",
-    "RECURSIVE_SELF_IMPROVEMENT_VERSION",
-    "ControlledRsiValidationLoop",
-    "ControlledPrediction",
-    "RacingFutureEvaluation",
-    "RacingFrozenTrial",
-    "RacingHumanApproval",
-    "RacingPromotionReport",
-    "RacingRecursiveImprovementGate",
-    "RacingRsiCandidate",
-    "RacingWsiOutcomeLearner",
-    "WsiLearningSummary",
-    "SequentialEvidence",
     "RaceBacktestRow",
     "RaceDayHorseInput",
     "RacingBacktestReport",
+    "RacingWsiOutcomeLearner",
     "RecordedFrozenPrediction",
     "RecordedRaceResult",
-    "SIMPLE_LEADING_PREDICTION_NAME",
-    "EXPECTED_MINUTES_BEFORE_START",
-    "SIMPLE_WSI_THREE_SNAPSHOT_VERSION",
-    "SimpleRealtimeWsiSignal",
-    "SimpleWsiLearningSummary",
-    "SimpleThreeSnapshotWsiLearner",
-    "SimpleHorseFeatures",
-    "SimpleLeadingPredictionLambda",
-    "SimpleLeadingSignalLambdaV02",
-    "SimplePredictionOutput",
-    "SimpleRaceContext",
-    "SimpleScoreBreakdown",
+    "StatisticalLeadingSignal",
+    "StatisticalSignalInput",
+    "SUDDEN_MOVEMENT_THRESHOLD",
     "ThreeRaceValidationReport",
-    "TrialMetrics",
+    "TwoLayerSignal",
     "VALIDATION_RECORDS_2026_09_06",
-    "VerificationEvaluation",
-    "VerificationPrediction",
-    "VerificationResult",
+    "WsiLearningSummary",
     "body_weight_fit",
-    "build_jra_training_frame",
-    "builtin_backtest_cases_2026_09_06",
     "build_monthly_condition_stats",
     "build_prediction",
     "build_result_labels",
-    "calculate_support_wsi",
-    "candidate_manifest_digest",
-    "canonicalize_parameter_keys",
-    "approved_parameters",
-    "approve_promotion",
     "build_snapshot_stats",
-    "build_three_snapshot_features",
-    "build_three_snapshot_training_frame",
     "build_statistical_inputs",
+    "builtin_backtest_cases_2026_09_06",
+    "calculate_support_wsi",
+    "combine_two_layers",
+    "detect_sudden_odds_movement",
+    "evaluate_four_horse_extraction",
     "evaluate_prediction",
-    "evaluate_verification",
+    "freeze_four_horse_extraction",
     "freeze_prediction",
-    "freeze_verification_prediction",
     "freeze_snapshot",
-    "freeze_recursive_rsi_candidate",
-    "freeze_recursive_rsi_approval",
-    "freeze_recursive_rsi_trial",
-    "freeze_recursive_rsi_report",
     "ingest_snapshot",
     "ingest_snapshot_file",
+    "latest_wsi_state",
     "load_frozen_prediction",
     "load_frozen_snapshot",
-    "latest_wsi_state",
     "normalized_market_probabilities",
-    "odds_snapshots_from_official",
     "pace_position_score",
-    "payload_digest",
-    "parameter_manifest_digest",
-    "sequential_loss_improvement_test",
-    "trial_manifest_digest",
     "rank_odds_distortion",
     "recent_form_score",
     "run_frozen_backtest",
-    "settle_verification_result",
+    "scan_field_for_sudden_movement",
+    "settle_four_horse_extraction",
     "validate_record",
     "validation_summary_2026_09_06",
-    "validate_recursive_rsi_successor",
-    "verify_promotion_report",
 ]

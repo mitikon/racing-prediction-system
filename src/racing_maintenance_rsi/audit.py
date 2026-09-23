@@ -55,7 +55,6 @@ class AuditReport:
             "autonomous_main_merge": False,
             "betting_authority": False,
             "investment_system_access": False,
-            "recursive_rsi_autonomous_promotion": False,
         }
 
 
@@ -99,15 +98,18 @@ def _module_numbers(path: Path) -> dict[str, float]:
 
 
 def _check_core(root: Path) -> list[AuditFinding]:
+    """Protect the current prediction core: the PCA-independent four-horse
+    extraction method plus the shared freeze/ingestion/guard infrastructure.
+
+    本格・簡易式先行予測λと部分空間正則化PCA一式は2026-09-23に削除した
+    （実戦検証で成績が悪化し、新方式の予測には無関係と判断したため）。
+    この関数はその削除後の中核だけを保護する。
+    """
     findings: list[AuditFinding] = []
     required = (
-        root / "src/racing_lambda/regularized_pca.py",
-        root / "src/racing_lambda/full_leading_prediction_lambda.py",
-        root / "src/racing_lambda/wsi_self_learning.py",
-        root / "src/racing_lambda/jra_official_free_ingestion.py",
         root / "src/racing_lambda/freeze.py",
-        root / "src/racing_lambda/recursive_self_improvement.py",
-        root / "src/racing_lambda/controlled_rsi_validation.py",
+        root / "src/racing_lambda/jra_official_free_ingestion.py",
+        root / "src/racing_lambda/four_horse_extraction.py",
         root / "src/racing_maintenance_rsi/data_guard.py",
     )
     for path in required:
@@ -116,57 +118,42 @@ def _check_core(root: Path) -> list[AuditFinding]:
     if findings:
         return findings
 
-    constants = _module_numbers(required[0])
-    expected = {"RECENT_CORRELATION_WEIGHT": 0.10, "PRIOR_CORRELATION_WEIGHT": 0.90}
-    for name, value in expected.items():
-        if constants.get(name) != value:
-            findings.append(
-                AuditFinding("CORE_INVARIANT_CHANGED", Severity.CRITICAL, f"{name} must remain {value}", str(required[0]))
-            )
-
-    freeze_text = required[4].read_text(encoding="utf-8")
-    snapshot_text = required[3].read_text(encoding="utf-8")
+    freeze_text = required[0].read_text(encoding="utf-8")
+    snapshot_text = required[1].read_text(encoding="utf-8")
+    extraction_text = required[2].read_text(encoding="utf-8")
     if 'path.open("x"' not in freeze_text:
-        findings.append(AuditFinding("FROZEN_WRITE_WEAKENED", Severity.CRITICAL, "prediction freeze must use exclusive creation", str(required[4])))
+        findings.append(AuditFinding("FROZEN_WRITE_WEAKENED", Severity.CRITICAL, "prediction freeze must use exclusive creation", str(required[0])))
     if 'target.open("x"' not in snapshot_text:
-        findings.append(AuditFinding("SNAPSHOT_WRITE_WEAKENED", Severity.CRITICAL, "snapshot freeze must use exclusive creation", str(required[3])))
-    full_text = required[1].read_text(encoding="utf-8")
-    if 'phase != "PRE_RACE"' not in full_text:
-        findings.append(AuditFinding("RESULT_GATE_MISSING", Severity.CRITICAL, "RESULT snapshots must be rejected from prediction input", str(required[1])))
-    recursive_text = required[5].read_text(encoding="utf-8")
-    for required_guard in (
-        '"autonomous_source_edits": False',
-        '"autonomous_main_merge": False',
-        '"betting_authority": False',
-        '"human_approval_required": True',
-        "def verify_promotion_report(",
-        "def approved_parameters(",
-        'status="HUMAN_APPROVED"',
-    ):
-        if required_guard not in recursive_text:
-            findings.append(AuditFinding("RECURSIVE_RSI_GUARD_REMOVED", Severity.CRITICAL, f"required recursive RSI guard is missing: {required_guard}", str(required[5])))
-    controlled_text = required[6].read_text(encoding="utf-8")
-    if "class ControlledRsiValidationLoop" not in controlled_text:
-        findings.append(AuditFinding("RSI_OPERATIONAL_LOOP_MISSING", Severity.CRITICAL, "controlled RSI operational loop is missing", str(required[6])))
-    simple_path = root / "src/racing_lambda/simple_leading_signal_v02.py"
-    simple_text = simple_path.read_text(encoding="utf-8") if simple_path.is_file() else ""
-    entrypoint_guards = (
-        ("validation_loop.run_full_prediction", full_text, required[1]),
-        ("def score_jra_race_research(", full_text, required[1]),
-        ("validation_loop.run_simple_prediction", simple_text, simple_path),
-        ("def rank_research(", simple_text, simple_path),
-        ("class ControlledPrediction", controlled_text, required[6]),
-    )
-    for guard, source, path in entrypoint_guards:
-        if guard not in source:
-            findings.append(AuditFinding(
-                "RSI_PREDICTION_ENTRYPOINT_DISCONNECTED",
+        findings.append(AuditFinding("SNAPSHOT_WRITE_WEAKENED", Severity.CRITICAL, "snapshot freeze must use exclusive creation", str(required[1])))
+    if 'path.open("x"' not in extraction_text:
+        findings.append(AuditFinding("EXTRACTION_WRITE_WEAKENED", Severity.CRITICAL, "four-horse extraction freeze must use exclusive creation", str(required[2])))
+
+    constants = _module_numbers(required[2])
+    if constants.get("EXTRACTION_COUNT") != 4:
+        findings.append(
+            AuditFinding("CORE_INVARIANT_CHANGED", Severity.CRITICAL, "EXTRACTION_COUNT must remain 4", str(required[2]))
+        )
+    if 'EXTRACTION_METHOD = "photo_prompt_manual_extraction"' not in extraction_text:
+        findings.append(
+            AuditFinding(
+                "CORE_INVARIANT_CHANGED",
                 Severity.CRITICAL,
-                f"official prediction control is missing: {guard}",
-                str(path),
-            ))
-    if "inspect_with_content" not in required[7].read_text(encoding="utf-8"):
-        findings.append(AuditFinding("TOCTOU_GUARD_MISSING", Severity.CRITICAL, "inspected bytes must flow directly into ingestion", str(required[7])))
+                "EXTRACTION_METHOD must remain photo_prompt_manual_extraction",
+                str(required[2]),
+            )
+        )
+    if "every starter must be reviewed before selection" not in extraction_text:
+        findings.append(
+            AuditFinding(
+                "FULL_FIELD_REVIEW_GUARD_REMOVED",
+                Severity.CRITICAL,
+                "four-horse extraction must reject predictions that skip reviewing any starter",
+                str(required[2]),
+            )
+        )
+
+    if "inspect_with_content" not in required[3].read_text(encoding="utf-8"):
+        findings.append(AuditFinding("TOCTOU_GUARD_MISSING", Severity.CRITICAL, "inspected bytes must flow directly into ingestion", str(required[3])))
     return findings
 
 
@@ -286,18 +273,14 @@ def audit_repository(root: str | Path) -> AuditReport:
         status=status,
         findings=tuple(findings),
         checked_controls=(
-            "racing_pca_fixed_0.10_0.90",
-            "pre_race_result_separation",
+            "four_horse_extraction_fixed_method_and_count",
+            "four_horse_extraction_full_field_review",
             "exclusive_frozen_writes",
             "python_syntax",
             "unsafe_deserialization",
             "high_confidence_secret_scan",
             "workflow_least_privilege",
             "action_sha_pinning",
-            "recursive_rsi_human_promotion_gate",
-            "promotion_report_integrity_recheck",
-            "controlled_rsi_operational_loop",
-            "mandatory_rsi_prediction_entrypoints",
             "same_bytes_ingestion",
             "ast_import_alias_resolution",
         ),
