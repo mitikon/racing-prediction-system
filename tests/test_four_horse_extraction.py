@@ -21,6 +21,8 @@ def _prediction(**overrides):
         scheduled_start=start.isoformat(),
         frozen_at=(start - timedelta(minutes=5)).isoformat(),
         horses=("8", "3", "5", "2"),
+        field_size=8,
+        reviewed_horse_numbers=("1", "2", "3", "4", "5", "6", "7", "8"),
         evidence_notes=("出馬表画像より直近上昇度を最重視", "距離短縮を減点"),
         source_document_sha256=("a" * 64,),
     )
@@ -44,6 +46,29 @@ def test_prediction_must_be_frozen_before_start():
 def test_method_field_cannot_be_repurposed_as_pca():
     with pytest.raises(ValueError):
         _prediction(method="regularized_pca")
+
+
+def test_partial_field_review_is_rejected():
+    """一部の目立つ馬だけを見て4頭を選ぶことを禁止する。"""
+    with pytest.raises(ValueError, match="every starter must be reviewed"):
+        _prediction(field_size=8, reviewed_horse_numbers=("1", "2", "3", "8"))
+
+
+def test_duplicate_reviewed_horse_numbers_are_rejected():
+    with pytest.raises(ValueError, match="duplicates"):
+        _prediction(
+            field_size=8,
+            reviewed_horse_numbers=("1", "2", "3", "4", "5", "6", "7", "7"),
+        )
+
+
+def test_selected_horses_must_be_among_reviewed_starters():
+    with pytest.raises(ValueError, match="reviewed starters"):
+        _prediction(
+            horses=("8", "3", "5", "9"),
+            field_size=8,
+            reviewed_horse_numbers=("1", "2", "3", "4", "5", "6", "7", "8"),
+        )
 
 
 def test_write_once_prevents_posthoc_prediction_overwrite(tmp_path):

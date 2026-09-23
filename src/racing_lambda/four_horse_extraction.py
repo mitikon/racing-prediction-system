@@ -41,16 +41,26 @@ def _canonical(payload: Mapping[str, Any]) -> bytes:
 
 @dataclass(frozen=True)
 class FourHorseExtraction:
+    """予想4頭抽出方式の凍結予測。
+
+    ``reviewed_horse_numbers``は出走全馬の馬番を含まなければならない。
+    一部の目立つ馬だけを見て4頭を選ぶことを防ぎ、大衆と同じ公開情報
+    (出馬表・オッズ・馬体重・直近成績・騎手/調教師/生産牧場)を出走馬
+    全頭について漏れなく確認したことをコードで強制する。
+    """
+
     race_id: str
     race_name: str
     venue: str
     scheduled_start: str
     frozen_at: str
     horses: tuple[str, ...]
+    field_size: int
+    reviewed_horse_numbers: tuple[str, ...]
     evidence_notes: tuple[str, ...] = ()
     source_document_sha256: tuple[str, ...] = ()
     method: str = EXTRACTION_METHOD
-    schema_version: int = 1
+    schema_version: int = 2
 
     def __post_init__(self) -> None:
         if not self.race_id.strip():
@@ -59,6 +69,17 @@ class FourHorseExtraction:
             raise ValueError(f"horses must contain exactly {EXTRACTION_COUNT} unique picks")
         if self.method != EXTRACTION_METHOD:
             raise ValueError(f"method must remain {EXTRACTION_METHOD!r}")
+        if self.field_size < EXTRACTION_COUNT:
+            raise ValueError("field_size must be at least the extraction count")
+        if len(set(self.reviewed_horse_numbers)) != len(self.reviewed_horse_numbers):
+            raise ValueError("reviewed_horse_numbers must not contain duplicates")
+        if len(self.reviewed_horse_numbers) != self.field_size:
+            raise ValueError(
+                "every starter must be reviewed before selection: "
+                f"reviewed {len(self.reviewed_horse_numbers)} of {self.field_size}"
+            )
+        if not set(self.horses) <= set(self.reviewed_horse_numbers):
+            raise ValueError("selected horses must be among the reviewed starters")
         start = datetime.fromisoformat(self.scheduled_start)
         frozen = datetime.fromisoformat(self.frozen_at)
         if start.tzinfo is None or frozen.tzinfo is None:

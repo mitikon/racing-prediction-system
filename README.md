@@ -12,8 +12,9 @@
 
 - **入力**: 出馬表・成績欄の写真、または対象レースを指定したプロンプト
 - **予想の生成**: 定量式では計算しません。写真・プロンプトを読んだ人間またはLLMが直接判断し、ちょうど4頭を順位付きで抽出します
+- **全頭レビューの徹底（必須）**: 出走全馬のオッズ・馬体重・直近成績・騎手/調教師/生産牧場を、一頭も漏らさず確認したことを`reviewed_horse_numbers`（`field_size`と同数、重複不可）で証跡として残します。一部の目立つ馬だけを見て4頭を選ぶ凍結予測は`ValueError`で拒否されます。過去の検証で、実際の3着以内馬が事前記録に一切言及がなく見逃されていたケースが繰り返し見つかったため、大衆と同じ公開情報を「一部だけ」ではなく「漏れなく」読むことをコードで強制しています
 - **このモジュールの役割**: 生成された4頭を発走前に`open("x")`で排他的に凍結保存し、結果判明後に馬連・ワイド・三連複・三連単それぞれの機械的な的中判定と、「予想した馬が実際には4着だった」ような僅差の取りこぼしを`near_miss_horses`として定量記録します
-- `EXTRACTION_METHOD = "photo_prompt_manual_extraction"`と`EXTRACTION_COUNT = 4`は保守専用RSI（`racing_maintenance_rsi`）が固定監査します
+- `EXTRACTION_METHOD = "photo_prompt_manual_extraction"`・`EXTRACTION_COUNT = 4`・全頭レビュー強制は保守専用RSI（`racing_maintenance_rsi`）が固定監査します
 
 ```bash
 python -m pytest tests/test_four_horse_extraction.py
