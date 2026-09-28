@@ -151,6 +151,16 @@ def _check_core(root: Path) -> list[AuditFinding]:
                 str(required[2]),
             )
         )
+    if "running_styles must record every reviewed starter" not in extraction_text:
+        findings.append(
+            AuditFinding(
+                "PACE_STYLE_REVIEW_GUARD_REMOVED",
+                Severity.CRITICAL,
+                "four-horse extraction must reject predictions that skip a popularity-blind "
+                "running-style review of every starter",
+                str(required[2]),
+            )
+        )
 
     if "inspect_with_content" not in required[3].read_text(encoding="utf-8"):
         findings.append(AuditFinding("TOCTOU_GUARD_MISSING", Severity.CRITICAL, "inspected bytes must flow directly into ingestion", str(required[3])))
@@ -275,6 +285,7 @@ def audit_repository(root: str | Path) -> AuditReport:
         checked_controls=(
             "four_horse_extraction_fixed_method_and_count",
             "four_horse_extraction_full_field_review",
+            "four_horse_extraction_pace_style_review",
             "exclusive_frozen_writes",
             "python_syntax",
             "unsafe_deserialization",

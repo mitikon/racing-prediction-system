@@ -47,6 +47,16 @@ class FourHorseExtraction:
     一部の目立つ馬だけを見て4頭を選ぶことを防ぎ、大衆と同じ公開情報
     (出馬表・オッズ・馬体重・直近成績・騎手/調教師/生産牧場)を出走馬
     全頭について漏れなく確認したことをコードで強制する。
+
+    ``running_styles``は出走全馬について、人気・オッズに一切関係なく
+    脚質（逃げ・先行・差し・追込等）を記録したものでなければならない。
+    2026-09-27スプリンターズSの答え合わせで、人気馬・直近好タイムの
+    馬を偏重し、中位人気の先行馬が実際には展開の恩恵を受けて上位に
+    残る可能性を軽視した反省から追加した。特定レースの結果に合わせて
+    「穴馬を当てる」ロジックではなく、今後のどのレースにも同じ形で
+    適用する一般ルールとして、人気に関わらず全頭の脚質と想定される
+    ペース（``pace_scenario``）を明示的に記録させることで、判断が
+    オッズ・人気の言い訳に流れることを防ぐ。
     """
 
     race_id: str
@@ -57,10 +67,12 @@ class FourHorseExtraction:
     horses: tuple[str, ...]
     field_size: int
     reviewed_horse_numbers: tuple[str, ...]
+    running_styles: tuple[tuple[str, str], ...]
+    pace_scenario: str
     evidence_notes: tuple[str, ...] = ()
     source_document_sha256: tuple[str, ...] = ()
     method: str = EXTRACTION_METHOD
-    schema_version: int = 2
+    schema_version: int = 3
 
     def __post_init__(self) -> None:
         if not self.race_id.strip():
@@ -80,6 +92,19 @@ class FourHorseExtraction:
             )
         if not set(self.horses) <= set(self.reviewed_horse_numbers):
             raise ValueError("selected horses must be among the reviewed starters")
+        style_horses = [horse for horse, _ in self.running_styles]
+        if len(set(style_horses)) != len(style_horses):
+            raise ValueError("running_styles must not contain duplicate horse numbers")
+        if set(style_horses) != set(self.reviewed_horse_numbers):
+            raise ValueError(
+                "running_styles must record every reviewed starter's running style "
+                "regardless of popularity, before selection: "
+                f"styled {len(set(style_horses))} of {len(self.reviewed_horse_numbers)}"
+            )
+        if any(not style.strip() for _, style in self.running_styles):
+            raise ValueError("running_styles values must not be empty")
+        if not self.pace_scenario.strip():
+            raise ValueError("pace_scenario is required")
         start = datetime.fromisoformat(self.scheduled_start)
         frozen = datetime.fromisoformat(self.frozen_at)
         if start.tzinfo is None or frozen.tzinfo is None:

@@ -23,6 +23,17 @@ def _prediction(**overrides):
         horses=("8", "3", "5", "2"),
         field_size=8,
         reviewed_horse_numbers=("1", "2", "3", "4", "5", "6", "7", "8"),
+        running_styles=(
+            ("1", "逃げ"),
+            ("2", "先行"),
+            ("3", "差し"),
+            ("4", "追込"),
+            ("5", "先行"),
+            ("6", "差し"),
+            ("7", "逃げ"),
+            ("8", "先行"),
+        ),
+        pace_scenario="ハイペース想定",
         evidence_notes=("出馬表画像より直近上昇度を最重視", "距離短縮を減点"),
         source_document_sha256=("a" * 64,),
     )
@@ -60,6 +71,55 @@ def test_duplicate_reviewed_horse_numbers_are_rejected():
             field_size=8,
             reviewed_horse_numbers=("1", "2", "3", "4", "5", "6", "7", "7"),
         )
+
+
+def test_partial_running_style_review_is_rejected():
+    """人気馬だけ脚質を記録して中位人気の先行馬を見落とすことを禁止する。"""
+    with pytest.raises(ValueError, match="running_styles must record every reviewed starter"):
+        _prediction(
+            running_styles=(
+                ("1", "逃げ"),
+                ("2", "先行"),
+                ("3", "差し"),
+            ),
+        )
+
+
+def test_duplicate_running_style_horse_numbers_are_rejected():
+    with pytest.raises(ValueError, match="running_styles must not contain duplicate"):
+        _prediction(
+            running_styles=(
+                ("1", "逃げ"),
+                ("1", "先行"),
+                ("2", "先行"),
+                ("3", "差し"),
+                ("4", "追込"),
+                ("5", "先行"),
+                ("6", "差し"),
+                ("7", "逃げ"),
+            ),
+        )
+
+
+def test_empty_running_style_value_is_rejected():
+    with pytest.raises(ValueError, match="running_styles values must not be empty"):
+        _prediction(
+            running_styles=(
+                ("1", "逃げ"),
+                ("2", ""),
+                ("3", "差し"),
+                ("4", "追込"),
+                ("5", "先行"),
+                ("6", "差し"),
+                ("7", "逃げ"),
+                ("8", "先行"),
+            ),
+        )
+
+
+def test_pace_scenario_is_required():
+    with pytest.raises(ValueError, match="pace_scenario is required"):
+        _prediction(pace_scenario="  ")
 
 
 def test_selected_horses_must_be_among_reviewed_starters():
