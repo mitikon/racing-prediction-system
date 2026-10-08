@@ -28,6 +28,7 @@ from .four_horse_extraction import (
 from .freeze import freeze_prediction, load_frozen_prediction
 from .market_probability import (
     MarketProbability,
+    estimate_favorite_top3_probability,
     estimate_market_top3_probabilities,
     harville_top3_probabilities,
     implied_win_probabilities,
@@ -142,6 +143,7 @@ __all__ = [
     "calculate_support_wsi",
     "combine_two_layers",
     "detect_sudden_odds_movement",
+    "estimate_favorite_top3_probability",
     "estimate_market_top3_probabilities",
     "evaluate_four_horse_extraction",
     "evaluate_prediction",

@@ -104,3 +104,18 @@ def estimate_market_top3_probabilities(win_odds: Mapping[str, float]) -> list[Ma
         )
         for horse_id in win_odds
     ]
+
+
+def estimate_favorite_top3_probability(win_odds: Mapping[str, float]) -> MarketProbability:
+    """出走全馬の単勝オッズから1番人気(最低オッズ)を特定し、その馬の
+    3着以内確率をHarvilleモデルで推定する。
+
+    「1番人気だから3着以内に来るはず」という決めつけを避けるため、
+    1番人気というラベルではなく、そのオッズ水準から実際に見込まれる
+    3着以内確率を数値で確認する用途を想定する。
+    """
+    if not win_odds:
+        raise ValueError("win_odds must not be empty")
+    favorite_id = min(win_odds, key=lambda horse_id: win_odds[horse_id])
+    rows = estimate_market_top3_probabilities(win_odds)
+    return next(row for row in rows if row.horse_id == favorite_id)

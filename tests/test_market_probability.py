@@ -2,6 +2,7 @@ import pytest
 
 from racing_lambda.market_probability import (
     MarketProbability,
+    estimate_favorite_top3_probability,
     estimate_market_top3_probabilities,
     harville_top3_probabilities,
     implied_win_probabilities,
@@ -62,3 +63,36 @@ def test_estimate_market_top3_probabilities_round_trips_odds():
     rows = estimate_market_top3_probabilities(odds)
     assert {row.horse_id for row in rows} == set(odds)
     assert all(0.0 <= row.estimated_top3_probability <= 1.0 for row in rows)
+
+
+def test_estimate_favorite_top3_probability_picks_lowest_odds_horse():
+    odds = {"5": 2.2, "9": 9.6, "13": 3.9, "16": 13.9}
+    favorite = estimate_favorite_top3_probability(odds)
+    assert favorite.horse_id == "5"
+    assert favorite.win_odds == 2.2
+    assert 0.0 <= favorite.estimated_top3_probability <= 1.0
+
+
+def test_estimate_favorite_top3_probability_short_price_favorite_is_well_above_half():
+    # 混戦ではない「抜けた本命」(単勝1.0倍台〜2倍前半)を想定したケース。
+    odds = {"1": 1.8, "2": 8.0, "3": 12.0, "4": 20.0, "5": 25.0}
+    favorite = estimate_favorite_top3_probability(odds)
+    assert favorite.horse_id == "1"
+    assert favorite.estimated_top3_probability > 0.75
+
+
+def test_estimate_favorite_top3_probability_contested_favorite_is_lower():
+    # 混戦の1番人気(単勝4〜5倍程度)を想定したケース。抜けた本命より
+    # 3着以内確率が下がることを確認する。
+    short_price = estimate_favorite_top3_probability(
+        {"1": 1.8, "2": 8.0, "3": 12.0, "4": 20.0, "5": 25.0}
+    )
+    contested = estimate_favorite_top3_probability(
+        {"1": 4.5, "2": 5.0, "3": 6.0, "4": 10.0, "5": 15.0}
+    )
+    assert contested.estimated_top3_probability < short_price.estimated_top3_probability
+
+
+def test_estimate_favorite_top3_probability_rejects_empty_input():
+    with pytest.raises(ValueError):
+        estimate_favorite_top3_probability({})
