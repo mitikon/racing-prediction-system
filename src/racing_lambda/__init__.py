@@ -26,6 +26,13 @@ from .four_horse_extraction import (
     settle_four_horse_extraction,
 )
 from .freeze import freeze_prediction, load_frozen_prediction
+from .jra_favorite_statistics import (
+    FAVORITE_OVERALL_PLACE_RATE_RANGE,
+    FAVORITE_OVERALL_WIN_RATE_RANGE,
+    FAVORITE_PLACE_RATE_REFERENCES,
+    FavoritePlaceRateReference,
+    lookup_favorite_place_rate_reference,
+)
 from .market_probability import (
     MarketProbability,
     estimate_favorite_top3_probability,
@@ -102,6 +109,10 @@ __all__ = [
     "EXTRACTION_METHOD",
     "ExtractionEvaluation",
     "ExtractionResult",
+    "FAVORITE_OVERALL_PLACE_RATE_RANGE",
+    "FAVORITE_OVERALL_WIN_RATE_RANGE",
+    "FAVORITE_PLACE_RATE_REFERENCES",
+    "FavoritePlaceRateReference",
     "FourHorseExtraction",
     "FrozenRaceCase",
     "HorseEntry",
@@ -157,6 +168,7 @@ __all__ = [
     "latest_wsi_state",
     "load_frozen_prediction",
     "load_frozen_snapshot",
+    "lookup_favorite_place_rate_reference",
     "normalized_market_probabilities",
     "pace_position_score",
     "rank_odds_distortion",

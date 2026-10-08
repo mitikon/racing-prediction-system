@@ -46,6 +46,19 @@ python -m pytest tests/test_odds_movement_alert.py
 python -m pytest tests/test_market_probability.py
 ```
 
+## JRA実測統計による1番人気オッズ帯別複勝率（仮説段階・2026-10-08追加）
+
+`jra_favorite_statistics.py`は、Harvilleの理論モデルとは別に、公開されている集計記事から収集した**1番人気限定の実測複勝率レンジ**を保持します。
+
+- 出典: JRA-VAN「DATA DRIVEN DERBY」(G1限定・過去10年)、うまめし(umameshi.com)の1番人気複勝集計記事、東洋経済オンライン、現代ビジネス(2026-10-08にWeb検索で収集。出典ごとに集計期間・対象レース範囲が異なるため、単一の数値ではなく範囲として保持する)
+- `lookup_favorite_place_rate_reference(odds)`で1番人気のオッズから該当する実測複勝率レンジを引く。該当する実測データが見つかっていないオッズ帯(2.0〜2.9倍など)は無理に補間せず`None`を返す
+- 単勝1.0〜1.4倍で複勝率81.3〜89.7%、1.5〜1.9倍で73.8〜80%超、3.0〜3.9倍で約50%という参考値を保持する
+- `market_probability.py`のHarville理論値と併記して参照する検討材料であり、予想4頭抽出方式には自動接続しない
+
+```bash
+python -m pytest tests/test_jra_favorite_statistics.py
+```
+
 ## 「RSI」の定義
 
 このリポジトリで「RSI」という略称は`racing_maintenance_rsi`（保守専用RSI: コード整合性・秘密情報・危険なコードパターン・GitHub Actionsの監査）だけを指します。相対力指数（Relative Strength Index、Wilderの計算式）は**WSI（Wilder Strength Index）**と呼び分け、`wsi_self_learning.py`に実装します。かつて存在した予測パラメータ昇格用のRSI（再帰的自己改善）は、対象パラメータ（本格・簡易式λ）ごと2026-09-23に削除しました。
