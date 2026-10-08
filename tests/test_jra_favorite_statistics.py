@@ -8,24 +8,38 @@ from racing_lambda.jra_favorite_statistics import (
 )
 
 
-def test_short_price_favorite_has_a_high_place_rate_reference():
+def test_short_price_favorite_has_a_high_verified_place_rate_reference():
     reference = lookup_favorite_place_rate_reference(1.2)
     assert isinstance(reference, FavoritePlaceRateReference)
     assert reference.low_estimate >= 0.8
     assert "JRA-VAN" in reference.source_note
+    assert reference.verified is True
 
 
-def test_mid_price_favorite_has_a_moderate_place_rate_reference():
+def test_mid_price_favorite_has_a_verified_moderate_place_rate_reference():
     reference = lookup_favorite_place_rate_reference(3.5)
     assert reference is not None
     assert reference.low_estimate == pytest.approx(0.50)
     assert reference.high_estimate == pytest.approx(0.50)
+    assert reference.verified is True
 
 
-def test_band_with_no_sourced_data_returns_none_instead_of_guessing():
-    # 2.0-2.9倍帯は1番人気限定の実測出典が見つかっていないため、
-    # 補間せずNoneを返す。
-    assert lookup_favorite_place_rate_reference(2.5) is None
+def test_band_filled_only_by_gemini_summary_is_marked_unverified():
+    # 2.0-2.9倍帯は1番人気限定の確認済み出典が見つかっていないため、
+    # Gemini(Google検索)要約値のみがverified=Falseで収録されている。
+    reference = lookup_favorite_place_rate_reference(2.5)
+    assert reference is not None
+    assert reference.verified is False
+    assert "Gemini" in reference.source_note
+    assert reference.low_estimate == pytest.approx(0.65)
+    assert reference.high_estimate == pytest.approx(0.67)
+
+
+def test_long_price_favorite_is_also_unverified_gemini_summary():
+    reference = lookup_favorite_place_rate_reference(5.0)
+    assert reference is not None
+    assert reference.verified is False
+    assert reference.high_estimate <= 0.45
 
 
 def test_odds_at_or_below_one_is_rejected():
