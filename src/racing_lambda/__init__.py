@@ -26,6 +26,12 @@ from .four_horse_extraction import (
     settle_four_horse_extraction,
 )
 from .freeze import freeze_prediction, load_frozen_prediction
+from .market_probability import (
+    MarketProbability,
+    estimate_market_top3_probabilities,
+    harville_top3_probabilities,
+    implied_win_probabilities,
+)
 from .odds_movement_alert import (
     SUDDEN_MOVEMENT_THRESHOLD,
     OddsMovementAlert,
@@ -100,6 +106,7 @@ __all__ = [
     "HorseEntry",
     "HorseMonthlyEvidence",
     "LeadingSignalPolicy",
+    "MarketProbability",
     "MonthlyBuildResult",
     "MonthlyConditionStats",
     "MonthlySnapshot",
@@ -135,11 +142,14 @@ __all__ = [
     "calculate_support_wsi",
     "combine_two_layers",
     "detect_sudden_odds_movement",
+    "estimate_market_top3_probabilities",
     "evaluate_four_horse_extraction",
     "evaluate_prediction",
     "freeze_four_horse_extraction",
     "freeze_prediction",
     "freeze_snapshot",
+    "harville_top3_probabilities",
+    "implied_win_probabilities",
     "ingest_snapshot",
     "ingest_snapshot_file",
     "latest_wsi_state",

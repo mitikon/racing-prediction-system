@@ -33,6 +33,18 @@ python -m pytest tests/test_four_horse_extraction.py
 python -m pytest tests/test_odds_movement_alert.py
 ```
 
+## 市場織り込み3着以内確率（仮説段階・2026-10-08追加）
+
+`market_probability.py`は、出走全馬の単勝オッズから、各馬の3着以内確率を推定します。
+
+- JRA統計で一般に知られる「同じ1番人気でもオッズ水準で複勝率が大きく違う（抜けた本命ほど複勝率が高く、混戦の1番人気ほど低い）」という傾向を、特定レースの結果に合わせて作った係数ではなく、単勝オッズを確率に変換する標準的な統計モデル(Harville, 1973)で定量化したもの
+- `implied_win_probabilities`でオッズの逆数を控除率(オーバーラウンド)で正規化し市場の勝率を求め、`harville_top3_probabilities`でPlackett-Luceモデルに基づき3着以内確率を推定する
+- 展開・脚質・馬場適性・騎手/調教師評価などは一切考慮しない純粋なオッズの確率変換であり、予想4頭抽出方式には自動接続しない。`running_styles`・`pace_scenario`による全頭レビューと並ぶ検討材料として、オッズが共有された際に都度参照する
+
+```bash
+python -m pytest tests/test_market_probability.py
+```
+
 ## 「RSI」の定義
 
 このリポジトリで「RSI」という略称は`racing_maintenance_rsi`（保守専用RSI: コード整合性・秘密情報・危険なコードパターン・GitHub Actionsの監査）だけを指します。相対力指数（Relative Strength Index、Wilderの計算式）は**WSI（Wilder Strength Index）**と呼び分け、`wsi_self_learning.py`に実装します。かつて存在した予測パラメータ昇格用のRSI（再帰的自己改善）は、対象パラメータ（本格・簡易式λ）ごと2026-09-23に削除しました。
