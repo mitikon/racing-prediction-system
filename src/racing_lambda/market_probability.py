@@ -159,3 +159,69 @@ def compare_favorite_and_runner_up(win_odds: Mapping[str, float]) -> FavoriteGap
             favorite.estimated_top3_probability - runner_up.estimated_top3_probability, 6
         ),
     )
+
+
+@dataclass(frozen=True)
+class OddsGapProbability:
+    horse_id: str
+    rank: int
+    win_odds: float
+    estimated_top3_probability: float
+    odds_gap_to_shorter: float | None
+    odds_gap_to_longer: float | None
+    probability_gap_to_shorter: float | None
+    probability_gap_to_longer: float | None
+
+
+def rank_odds_gap_probabilities(win_odds: Mapping[str, float]) -> list[OddsGapProbability]:
+    """全馬を人気順(オッズ昇順)に並べ、隣接する馬との単勝オッズ差と
+    3着以内確率差をHarvilleモデルで一括して求める。
+
+    `compare_favorite_and_runner_up`は1番人気と2番人気の組だけを見るが、
+    「オッズ差が大きいほど3着以内確率の差も開く」という傾向自体は
+    1番人気・2番人気の組に限った話ではなく、人気順で隣接するどの組
+    (2位↔3位、3位↔4位、…)にも同じHarvilleモデルの定義上当てはまる。
+    この関数はその一般化として、全馬それぞれについて「一つ上の人気の
+    馬との差」(odds_gap_to_shorter / probability_gap_to_shorter、
+    1番人気にはNone)と「一つ下の人気の馬との差」
+    (odds_gap_to_longer / probability_gap_to_longer、最下人気にはNone)
+    を返す。1番人気について見れば`odds_gap_to_longer`・
+    `probability_gap_to_longer`は`compare_favorite_and_runner_up`の
+    `odds_gap`・`probability_gap`と同じ値になる。
+
+    展開・脚質・馬場適性などを一切考慮しない純粋なオッズの確率変換で
+    あることは他の関数と同じであり、特定レースの結果に合わせた係数は
+    使っていない。予想4頭抽出方式には自動接続せず、全頭レビュー・
+    脚質レビューと並ぶ検討材料の一つとして都度参照する。
+    """
+    rows = estimate_market_top3_probabilities(win_odds)
+    sorted_rows = sorted(rows, key=lambda row: row.win_odds)
+    result: list[OddsGapProbability] = []
+    for index, row in enumerate(sorted_rows):
+        shorter = sorted_rows[index - 1] if index > 0 else None
+        longer = sorted_rows[index + 1] if index + 1 < len(sorted_rows) else None
+        result.append(
+            OddsGapProbability(
+                horse_id=row.horse_id,
+                rank=index + 1,
+                win_odds=row.win_odds,
+                estimated_top3_probability=row.estimated_top3_probability,
+                odds_gap_to_shorter=(
+                    round(row.win_odds - shorter.win_odds, 6) if shorter is not None else None
+                ),
+                odds_gap_to_longer=(
+                    round(longer.win_odds - row.win_odds, 6) if longer is not None else None
+                ),
+                probability_gap_to_shorter=(
+                    round(shorter.estimated_top3_probability - row.estimated_top3_probability, 6)
+                    if shorter is not None
+                    else None
+                ),
+                probability_gap_to_longer=(
+                    round(row.estimated_top3_probability - longer.estimated_top3_probability, 6)
+                    if longer is not None
+                    else None
+                ),
+            )
+        )
+    return result

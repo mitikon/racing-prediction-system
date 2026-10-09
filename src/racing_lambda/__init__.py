@@ -36,11 +36,13 @@ from .jra_favorite_statistics import (
 from .market_probability import (
     FavoriteGapComparison,
     MarketProbability,
+    OddsGapProbability,
     compare_favorite_and_runner_up,
     estimate_favorite_top3_probability,
     estimate_market_top3_probabilities,
     harville_top3_probabilities,
     implied_win_probabilities,
+    rank_odds_gap_probabilities,
 )
 from .odds_movement_alert import (
     SUDDEN_MOVEMENT_THRESHOLD,
@@ -126,6 +128,7 @@ __all__ = [
     "MonthlyConditionStats",
     "MonthlySnapshot",
     "OddsDistortion",
+    "OddsGapProbability",
     "OddsMovementAlert",
     "OfficialResult",
     "OfficialSnapshot",
@@ -176,6 +179,7 @@ __all__ = [
     "normalized_market_probabilities",
     "pace_position_score",
     "rank_odds_distortion",
+    "rank_odds_gap_probabilities",
     "recent_form_score",
     "run_frozen_backtest",
     "scan_field_for_sudden_movement",

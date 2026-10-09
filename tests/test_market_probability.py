@@ -3,11 +3,13 @@ import pytest
 from racing_lambda.market_probability import (
     FavoriteGapComparison,
     MarketProbability,
+    OddsGapProbability,
     compare_favorite_and_runner_up,
     estimate_favorite_top3_probability,
     estimate_market_top3_probabilities,
     harville_top3_probabilities,
     implied_win_probabilities,
+    rank_odds_gap_probabilities,
 )
 
 
@@ -131,3 +133,51 @@ def test_compare_favorite_and_runner_up_wider_gap_widens_probability_gap():
 def test_compare_favorite_and_runner_up_requires_at_least_three_horses():
     with pytest.raises(ValueError):
         compare_favorite_and_runner_up({"1": 2.0, "2": 3.0})
+
+
+def test_rank_odds_gap_probabilities_covers_every_horse_in_popularity_order():
+    odds = {"5": 2.2, "9": 9.6, "13": 3.9, "16": 13.9}
+    rows = rank_odds_gap_probabilities(odds)
+    assert [row.horse_id for row in rows] == ["5", "13", "9", "16"]
+    assert [row.rank for row in rows] == [1, 2, 3, 4]
+    assert all(isinstance(row, OddsGapProbability) for row in rows)
+
+
+def test_rank_odds_gap_probabilities_edge_horses_have_one_sided_gaps():
+    odds = {"5": 2.2, "9": 9.6, "13": 3.9, "16": 13.9}
+    rows = rank_odds_gap_probabilities(odds)
+    favorite = rows[0]
+    longshot = rows[-1]
+    assert favorite.odds_gap_to_shorter is None
+    assert favorite.probability_gap_to_shorter is None
+    assert favorite.odds_gap_to_longer is not None
+    assert longshot.odds_gap_to_longer is None
+    assert longshot.probability_gap_to_longer is None
+    assert longshot.odds_gap_to_shorter is not None
+
+
+def test_rank_odds_gap_probabilities_matches_compare_favorite_and_runner_up():
+    odds = {"5": 2.2, "9": 9.6, "13": 3.9, "16": 13.9}
+    comparison = compare_favorite_and_runner_up(odds)
+    rows = rank_odds_gap_probabilities(odds)
+    favorite = rows[0]
+    assert favorite.horse_id == comparison.favorite_id
+    assert favorite.odds_gap_to_longer == pytest.approx(comparison.odds_gap)
+    assert favorite.probability_gap_to_longer == pytest.approx(comparison.probability_gap)
+
+
+def test_rank_odds_gap_probabilities_middle_horse_has_both_neighbors_consistent():
+    odds = {"1": 2.0, "2": 4.0, "3": 6.0, "4": 10.0}
+    rows = rank_odds_gap_probabilities(odds)
+    by_id = {row.horse_id: row for row in rows}
+    second = by_id["2"]
+    first = by_id["1"]
+    third = by_id["3"]
+    assert second.odds_gap_to_shorter == pytest.approx(second.win_odds - first.win_odds)
+    assert second.odds_gap_to_longer == pytest.approx(third.win_odds - second.win_odds)
+    assert second.probability_gap_to_shorter == pytest.approx(
+        first.estimated_top3_probability - second.estimated_top3_probability
+    )
+    assert second.probability_gap_to_longer == pytest.approx(
+        second.estimated_top3_probability - third.estimated_top3_probability
+    )
