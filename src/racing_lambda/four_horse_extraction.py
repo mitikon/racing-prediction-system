@@ -18,7 +18,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from hashlib import sha256
 import json
@@ -57,6 +57,14 @@ class FourHorseExtraction:
     適用する一般ルールとして、人気に関わらず全頭の脚質と想定される
     ペース（``pace_scenario``）を明示的に記録させることで、判断が
     オッズ・人気の言い訳に流れることを防ぐ。
+
+    ``win_odds``は任意項目で、出走全馬の単勝オッズを記録する
+    （2026-10-10追加）。一部の馬のオッズだけを``evidence_notes``の
+    自由記述に埋め込む従来の運用では、後から``market_probability.py``の
+    全馬向けツール（``rank_odds_gap_probabilities``等）で検証できなかった
+    反省から追加した。記録する場合は出走全馬（``reviewed_horse_numbers``と
+    同一集合）のオッズが揃っていなければならない。空のままでも良いが、
+    一部の馬だけを記録することは禁止する。
     """
 
     race_id: str
@@ -73,6 +81,7 @@ class FourHorseExtraction:
     source_document_sha256: tuple[str, ...] = ()
     method: str = EXTRACTION_METHOD
     schema_version: int = 3
+    win_odds: Mapping[str, float] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not self.race_id.strip():
@@ -105,6 +114,15 @@ class FourHorseExtraction:
             raise ValueError("running_styles values must not be empty")
         if not self.pace_scenario.strip():
             raise ValueError("pace_scenario is required")
+        if self.win_odds:
+            if set(self.win_odds) != set(self.reviewed_horse_numbers):
+                raise ValueError(
+                    "win_odds, once recorded, must cover every reviewed starter "
+                    "(no partial odds board): "
+                    f"recorded {len(set(self.win_odds))} of {len(self.reviewed_horse_numbers)}"
+                )
+            if any(odds <= 1.0 for odds in self.win_odds.values()):
+                raise ValueError("decimal win odds in win_odds must be greater than 1")
         start = datetime.fromisoformat(self.scheduled_start)
         frozen = datetime.fromisoformat(self.frozen_at)
         if start.tzinfo is None or frozen.tzinfo is None:

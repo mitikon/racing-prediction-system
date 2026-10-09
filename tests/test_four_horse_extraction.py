@@ -122,6 +122,36 @@ def test_pace_scenario_is_required():
         _prediction(pace_scenario="  ")
 
 
+def test_win_odds_is_optional_and_defaults_empty():
+    prediction = _prediction()
+    assert prediction.win_odds == {}
+
+
+def test_win_odds_must_cover_every_reviewed_starter():
+    with pytest.raises(ValueError, match="win_odds, once recorded, must cover every reviewed starter"):
+        _prediction(win_odds={"1": 2.0, "2": 3.0})
+
+
+def test_win_odds_rejects_odds_at_or_below_one():
+    with pytest.raises(ValueError, match="decimal win odds in win_odds must be greater than 1"):
+        _prediction(
+            win_odds={
+                "1": 1.0, "2": 3.0, "3": 4.0, "4": 5.0,
+                "5": 6.0, "6": 7.0, "7": 8.0, "8": 9.0,
+            }
+        )
+
+
+def test_win_odds_accepts_full_field_coverage():
+    prediction = _prediction(
+        win_odds={
+            "1": 10.0, "2": 2.0, "3": 5.0, "4": 20.0,
+            "5": 4.0, "6": 8.0, "7": 15.0, "8": 3.0,
+        }
+    )
+    assert prediction.win_odds["2"] == 2.0
+
+
 def test_selected_horses_must_be_among_reviewed_starters():
     with pytest.raises(ValueError, match="reviewed starters"):
         _prediction(
