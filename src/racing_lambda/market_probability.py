@@ -119,3 +119,43 @@ def estimate_favorite_top3_probability(win_odds: Mapping[str, float]) -> MarketP
     favorite_id = min(win_odds, key=lambda horse_id: win_odds[horse_id])
     rows = estimate_market_top3_probabilities(win_odds)
     return next(row for row in rows if row.horse_id == favorite_id)
+
+
+@dataclass(frozen=True)
+class FavoriteGapComparison:
+    favorite_id: str
+    favorite_odds: float
+    favorite_top3_probability: float
+    runner_up_id: str
+    runner_up_odds: float
+    runner_up_top3_probability: float
+    odds_gap: float
+    probability_gap: float
+
+
+def compare_favorite_and_runner_up(win_odds: Mapping[str, float]) -> FavoriteGapComparison:
+    """1番人気と2番人気の単勝オッズ差から、両者の3着以内確率をHarville
+    モデルで比較する。
+
+    「1番人気と2番人気のオッズ差が大きい(=市場が1番人気に強い確信を
+    持っている)ほど、1番人気の3着以内確率が高く、2番人気との差も
+    開きやすい」という一般的な傾向を、特定レースの結果に合わせた係数
+    ではなく、実際のレースの全馬オッズそのものから計算して確認する。
+    出走馬が2頭以下の場合はHarvilleモデル自体が定義できないため
+    `ValueError`になる。
+    """
+    rows = estimate_market_top3_probabilities(win_odds)
+    sorted_rows = sorted(rows, key=lambda row: row.win_odds)
+    favorite, runner_up = sorted_rows[0], sorted_rows[1]
+    return FavoriteGapComparison(
+        favorite_id=favorite.horse_id,
+        favorite_odds=favorite.win_odds,
+        favorite_top3_probability=favorite.estimated_top3_probability,
+        runner_up_id=runner_up.horse_id,
+        runner_up_odds=runner_up.win_odds,
+        runner_up_top3_probability=runner_up.estimated_top3_probability,
+        odds_gap=round(runner_up.win_odds - favorite.win_odds, 6),
+        probability_gap=round(
+            favorite.estimated_top3_probability - runner_up.estimated_top3_probability, 6
+        ),
+    )

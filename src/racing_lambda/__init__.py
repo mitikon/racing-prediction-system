@@ -34,7 +34,9 @@ from .jra_favorite_statistics import (
     lookup_favorite_place_rate_reference,
 )
 from .market_probability import (
+    FavoriteGapComparison,
     MarketProbability,
+    compare_favorite_and_runner_up,
     estimate_favorite_top3_probability,
     estimate_market_top3_probabilities,
     harville_top3_probabilities,
@@ -112,6 +114,7 @@ __all__ = [
     "FAVORITE_OVERALL_PLACE_RATE_RANGE",
     "FAVORITE_OVERALL_WIN_RATE_RANGE",
     "FAVORITE_PLACE_RATE_REFERENCES",
+    "FavoriteGapComparison",
     "FavoritePlaceRateReference",
     "FourHorseExtraction",
     "FrozenRaceCase",
@@ -153,6 +156,7 @@ __all__ = [
     "builtin_backtest_cases_2026_09_06",
     "calculate_support_wsi",
     "combine_two_layers",
+    "compare_favorite_and_runner_up",
     "detect_sudden_odds_movement",
     "estimate_favorite_top3_probability",
     "estimate_market_top3_probabilities",
