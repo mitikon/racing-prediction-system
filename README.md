@@ -21,6 +21,40 @@
 python -m pytest tests/test_four_horse_extraction.py
 ```
 
+## 予想4頭抽出方式の実戦成績（定点観測）
+
+`EVALUATION`が記録された全レースの集計値。結果を見てから`four_horse_extraction.py`のロジックを変更することはしておらず、この数字自体が選出基準を直接変えることもない（後付け禁止ルール）。あくまで母数が増えるまでの定点観測として記録する。
+
+最終更新: 2026-10-10時点、計7レース
+
+| 指標 | 結果 |
+|---|---|
+| 勝馬捕捉（winner_captured） | 5/7 |
+| 馬連的中 | 1/7 |
+| ワイド的中 | 1/7 |
+| 三連複的中 | 0/7 |
+| 三連単的中 | 0/7 |
+| top3的中数（平均、predicted上位3頭ベース） | 1.0/3 |
+| 僅差の取りこぼし（`near_miss_horses`該当） | 2/7レース |
+| 4位指名（最終候補）が実際に馬券圏内 | 3/7レース |
+
+n=7はまだ傾向の有無を判断するには少なすぎる。特に「見送りと明記した馬が実際に馬券へ絡む」パターンが複数回発生している点、4位指名が的中圏に来る頻度が比較的高い点は、今後のレースでも観察を継続する。
+
+```bash
+python3 -c "
+import json
+from pathlib import Path
+rows = [json.loads((d / 'EVALUATION' / 'four_horse_evaluation.json').read_text())
+        for d in sorted(Path('data/four_horse_extraction').iterdir())
+        if (d / 'EVALUATION' / 'four_horse_evaluation.json').exists()]
+n = len(rows)
+print('n races:', n)
+print('winner_captured:', sum(r['winner_captured'] for r in rows), '/', n)
+print('umaren_hit:', sum(r['umaren_hit'] for r in rows), '/', n)
+print('wide_hit:', sum(r['wide_hit'] for r in rows), '/', n)
+"
+```
+
 ## オッズ急変動アラート（仮説段階）
 
 `odds_movement_alert.py`は、発走前オッズと最終（投票締切時）オッズを比較し、**±10%以上**動いた馬を機械的に検出します（2026-09-19阪神10R・1着12番、発走前約130倍→最終248.9倍の実例を契機に追加）。
