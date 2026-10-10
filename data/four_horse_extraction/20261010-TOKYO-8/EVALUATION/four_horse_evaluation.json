@@ -1,0 +1,20 @@
+{
+  "checksum_sha256": "8d91f7082df403fca9242c586f4204488b08d8115b3e44063ed35049a9c83978",
+  "exact_top3_set_hit": false,
+  "failure_categories": [
+    "抽出漏れ",
+    "着順僅差の取りこぼし",
+    "過大評価"
+  ],
+  "near_miss_horses": [
+    "10"
+  ],
+  "race_id": "20261010-TOKYO-8",
+  "recovery_rate": null,
+  "sanrenpuku_hit": false,
+  "sanrentan_hit": false,
+  "top3_hits": 2,
+  "umaren_hit": true,
+  "wide_hit": true,
+  "winner_captured": true
+}
