@@ -1,0 +1,17 @@
+{
+  "checksum_sha256": "fb8c0873e4f52869671fba5df0a8f3a8ab9ad7bb5d6006d340baa888cbcd9fab",
+  "exact_top3_set_hit": false,
+  "failure_categories": [
+    "抽出漏れ",
+    "過大評価"
+  ],
+  "near_miss_horses": [],
+  "race_id": "20261011-TOKYO-11",
+  "recovery_rate": null,
+  "sanrenpuku_hit": false,
+  "sanrentan_hit": false,
+  "top3_hits": 2,
+  "umaren_hit": false,
+  "wide_hit": false,
+  "winner_captured": true
+}

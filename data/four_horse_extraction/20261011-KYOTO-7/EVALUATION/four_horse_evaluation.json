@@ -1,0 +1,20 @@
+{
+  "checksum_sha256": "bd2fb0cba2c9ee50362249f94bca933b2c183df9ba2ec604c906778fff347e21",
+  "exact_top3_set_hit": false,
+  "failure_categories": [
+    "抽出漏れ",
+    "着順僅差の取りこぼし",
+    "過大評価"
+  ],
+  "near_miss_horses": [
+    "6"
+  ],
+  "race_id": "20261011-KYOTO-7",
+  "recovery_rate": null,
+  "sanrenpuku_hit": false,
+  "sanrentan_hit": false,
+  "top3_hits": 2,
+  "umaren_hit": false,
+  "wide_hit": false,
+  "winner_captured": false
+}
