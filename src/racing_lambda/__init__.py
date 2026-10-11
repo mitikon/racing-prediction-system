@@ -24,6 +24,7 @@ from .four_horse_extraction import (
     evaluate_four_horse_extraction,
     freeze_four_horse_extraction,
     settle_four_horse_extraction,
+    wide_pair_key,
 )
 from .freeze import freeze_prediction, load_frozen_prediction
 from .jra_favorite_statistics import (
@@ -186,4 +187,5 @@ __all__ = [
     "settle_four_horse_extraction",
     "validate_record",
     "validation_summary_2026_09_06",
+    "wide_pair_key",
 ]

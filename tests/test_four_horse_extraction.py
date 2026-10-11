@@ -9,6 +9,7 @@ from racing_lambda.four_horse_extraction import (
     evaluate_four_horse_extraction,
     freeze_four_horse_extraction,
     settle_four_horse_extraction,
+    wide_pair_key,
 )
 
 
@@ -150,6 +151,45 @@ def test_win_odds_accepts_full_field_coverage():
         }
     )
     assert prediction.win_odds["2"] == 2.0
+
+
+def test_wide_pair_key_normalizes_by_numeric_order():
+    assert wide_pair_key("11", "4") == "4-11"
+    assert wide_pair_key("4", "11") == "4-11"
+    assert wide_pair_key("8", "3") == "3-8"
+
+
+def test_wide_odds_is_optional_and_defaults_empty():
+    prediction = _prediction()
+    assert prediction.wide_odds == {}
+
+
+def test_wide_odds_must_cover_all_six_pairs_of_selected_horses():
+    # horses=("8", "3", "5", "2") の6通りのうち1組だけ欠けている
+    with pytest.raises(ValueError, match="wide_odds, once recorded, must cover all 6 pairs"):
+        _prediction(
+            wide_odds={
+                "3-8": 6.5, "5-8": 7.0, "2-8": 8.0, "3-5": 5.5, "2-3": 9.0,
+            }
+        )
+
+
+def test_wide_odds_rejects_odds_at_or_below_one():
+    with pytest.raises(ValueError, match="decimal wide odds in wide_odds must be greater than 1"):
+        _prediction(
+            wide_odds={
+                "3-8": 1.0, "5-8": 7.0, "2-8": 8.0, "3-5": 5.5, "2-3": 9.0, "2-5": 6.0,
+            }
+        )
+
+
+def test_wide_odds_accepts_all_six_pairs_of_selected_horses():
+    prediction = _prediction(
+        wide_odds={
+            "3-8": 6.5, "5-8": 7.0, "2-8": 8.0, "3-5": 5.5, "2-3": 9.0, "2-5": 6.0,
+        }
+    )
+    assert prediction.wide_odds[wide_pair_key("8", "3")] == 6.5
 
 
 def test_selected_horses_must_be_among_reviewed_starters():

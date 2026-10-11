@@ -21,12 +21,23 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from hashlib import sha256
+from itertools import combinations
 import json
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 EXTRACTION_METHOD = "photo_prompt_manual_extraction"
 EXTRACTION_COUNT = 4
+
+
+def wide_pair_key(horse_a: str, horse_b: str) -> str:
+    """ワイドの組み合わせを馬番の数値順に正規化した一意キーへ変換する。
+
+    ``"4-11"``のように小さい方の馬番を先に置く(文字列の辞書順だと
+    ``"11" < "4"``になってしまうため、整数として比較する)。
+    """
+    a, b = sorted((horse_a, horse_b), key=int)
+    return f"{a}-{b}"
 
 
 def _canonical(payload: Mapping[str, Any]) -> bytes:
@@ -65,6 +76,14 @@ class FourHorseExtraction:
     反省から追加した。記録する場合は出走全馬（``reviewed_horse_numbers``と
     同一集合）のオッズが揃っていなければならない。空のままでも良いが、
     一部の馬だけを記録することは禁止する。
+
+    ``wide_odds``も任意項目で、選出した4頭から作れる組み合わせ6通り
+    （4C2）それぞれのワイド最低オッズを``wide_pair_key(horse_a, horse_b)``
+    をキーとして記録する（2026-10-11追加）。「ワイドの最低オッズが
+    一定値以上の時だけ4頭BOXで購入する」という実際の馬券戦略を、
+    結果判明後にオッズ条件込みで検証できるようにする目的。出走全馬の
+    組み合わせ全てを記録する必要はなく、選出4頭のBOX6点のみを対象と
+    する。記録する場合は6通り全てが揃っていなければならない。
     """
 
     race_id: str
@@ -82,6 +101,7 @@ class FourHorseExtraction:
     method: str = EXTRACTION_METHOD
     schema_version: int = 3
     win_odds: Mapping[str, float] = field(default_factory=dict)
+    wide_odds: Mapping[str, float] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not self.race_id.strip():
@@ -123,6 +143,18 @@ class FourHorseExtraction:
                 )
             if any(odds <= 1.0 for odds in self.win_odds.values()):
                 raise ValueError("decimal win odds in win_odds must be greater than 1")
+        if self.wide_odds:
+            expected_pairs = {
+                wide_pair_key(a, b) for a, b in combinations(self.horses, 2)
+            }
+            if set(self.wide_odds) != expected_pairs:
+                raise ValueError(
+                    "wide_odds, once recorded, must cover all 6 pairs among the "
+                    f"selected four horses: expected {sorted(expected_pairs)}, "
+                    f"got {sorted(self.wide_odds)}"
+                )
+            if any(odds <= 1.0 for odds in self.wide_odds.values()):
+                raise ValueError("decimal wide odds in wide_odds must be greater than 1")
         start = datetime.fromisoformat(self.scheduled_start)
         frozen = datetime.fromisoformat(self.frozen_at)
         if start.tzinfo is None or frozen.tzinfo is None:
