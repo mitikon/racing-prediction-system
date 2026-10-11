@@ -290,6 +290,28 @@ def test_clean_top3_hit_scores_all_bet_types(tmp_path):
     assert evaluation.recovery_rate == 1.45
 
 
+def test_sanrentan_hit_survives_json_round_trip_with_list_typed_horses():
+    """settle_four_horse_extractionの実運用では、凍結済みPRE_RACEをjson.loads()で
+    読み戻してFourHorseExtraction(**body)で再構築する(本ファイルの他テストと違い
+    タプルのリテラルを直接渡さない)。dataclassは型ヒントを実行時に強制しないため、
+    JSON由来のhorsesはlistのまま保持され、tuple化し忘れるとsanrentan_hitが
+    list != tupleで常にFalseになる回帰バグが2026-10-11に発覚した。"""
+    import json as _json
+    from dataclasses import asdict as _asdict
+
+    p = _prediction(horses=("8", "3", "5", "2"))
+    reloaded = FourHorseExtraction(**_json.loads(_json.dumps(_asdict(p), default=str)))
+    assert isinstance(reloaded.horses, list)  # JSON往復でlistになっていることの前提確認
+
+    result = ExtractionResult(
+        race_id=reloaded.race_id,
+        finishing_order=("8", "3", "5"),
+        settled_at=datetime.now(timezone.utc).isoformat(),
+    )
+    evaluation = evaluate_four_horse_extraction(reloaded, result)
+    assert evaluation.sanrentan_hit is True
+
+
 def test_second_pick_finishing_fourth_fails_umaren_and_wide_despite_capturing_all_top3():
     """ユーザー報告の「1着4着」パターン: 馬連の相手候補が実際は4着で券外になり、
     3着以内馬はすべて予想4頭の中にいたのに主要券種が軒並み不的中になる。"""

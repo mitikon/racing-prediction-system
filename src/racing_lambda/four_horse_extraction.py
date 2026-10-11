@@ -252,8 +252,13 @@ def evaluate_four_horse_extraction(
     if prediction.race_id != result.race_id:
         raise ValueError("prediction/result race_id mismatch")
 
-    predicted_top2 = prediction.horses[:2]
-    predicted_top3 = prediction.horses[:3]
+    # prediction.horsesは型ヒント上はtupleだが、JSONへ一度書き出して
+    # 辞書展開(**body)で再構築した場合はlistのまま保持される。
+    # sanrentan_hitは順序まで見る直接比較のため、ここでtuple化して
+    # おかないと、実際には三連単的中しているのにlist!=tupleで
+    # 不的中と誤判定される(2026-10-11発覚)。
+    predicted_top2 = tuple(prediction.horses[:2])
+    predicted_top3 = tuple(prediction.horses[:3])
     predicted_set = set(prediction.horses)
     actual_top3 = tuple(result.finishing_order[:3])
     actual_top2 = set(result.finishing_order[:2])
