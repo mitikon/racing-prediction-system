@@ -164,6 +164,44 @@ class FourHorseExtraction:
 
 
 @dataclass(frozen=True)
+class WideOddsSnapshot:
+    """既存のPRE_RACE予想に対し、発走前に確認したワイドオッズを追記する別記録。
+
+    ``four_horse_extraction.json``自体は書き込み専用(``open("x")``)で、
+    一度凍結した選出4頭・根拠を書き換えることはできない。一方で単勝
+    オッズと違い、ワイドオッズは出馬表の段階では確定しておらず、発走
+    直前まで変動し続ける（締切直前に確認する運用が自然）。この記録は
+    選出4頭・根拠そのものを一切変更せず、発走前に確認したワイド
+    オッズだけを別ファイルとして追記するためのもの。「結果を見てから
+    書き換える」後付けとは異なり、発走前であることを``freeze_wide_odds_snapshot``
+    が検証する。
+    """
+
+    race_id: str
+    horses: tuple[str, ...]
+    captured_at: str
+    wide_odds: Mapping[str, float]
+    schema_version: int = 1
+
+    def __post_init__(self) -> None:
+        if not self.race_id.strip():
+            raise ValueError("race_id is required")
+        if len(self.horses) != EXTRACTION_COUNT or len(set(self.horses)) != EXTRACTION_COUNT:
+            raise ValueError(f"horses must contain exactly {EXTRACTION_COUNT} unique picks")
+        expected_pairs = {wide_pair_key(a, b) for a, b in combinations(self.horses, 2)}
+        if set(self.wide_odds) != expected_pairs:
+            raise ValueError(
+                "wide_odds must cover all 6 pairs among the selected four horses: "
+                f"expected {sorted(expected_pairs)}, got {sorted(self.wide_odds)}"
+            )
+        if any(odds <= 1.0 for odds in self.wide_odds.values()):
+            raise ValueError("decimal wide odds must be greater than 1")
+        captured = datetime.fromisoformat(self.captured_at)
+        if captured.tzinfo is None:
+            raise ValueError("captured_at must be timezone-aware")
+
+
+@dataclass(frozen=True)
 class ExtractionResult:
     race_id: str
     finishing_order: tuple[str, ...]
@@ -295,6 +333,37 @@ def freeze_four_horse_extraction(
     return _write_once(
         Path(root) / prediction.race_id / "PRE_RACE" / "four_horse_extraction.json",
         asdict(prediction),
+    )
+
+
+def freeze_wide_odds_snapshot(
+    root: str | Path,
+    snapshot: WideOddsSnapshot,
+) -> Path:
+    """既存のPRE_RACE予想に、発走前に確認したワイドオッズを追記専用で保存する。
+
+    対象レースのPRE_RACEがすでに凍結されていること、選出4頭が完全に
+    一致すること、発走予定時刻より前に確認したものであることを検証
+    してから書き込む。``four_horse_extraction.json``自体は一切変更しない。
+    """
+    pre_race_path = Path(root) / snapshot.race_id / "PRE_RACE" / "four_horse_extraction.json"
+    if not pre_race_path.exists():
+        raise FileNotFoundError(
+            f"no frozen PRE_RACE prediction found for {snapshot.race_id}: {pre_race_path}"
+        )
+    existing = json.loads(pre_race_path.read_text(encoding="utf-8"))
+    if tuple(existing["horses"]) != snapshot.horses:
+        raise ValueError(
+            "wide_odds_snapshot horses must match the frozen PRE_RACE selection: "
+            f"frozen={existing['horses']}, snapshot={snapshot.horses}"
+        )
+    scheduled_start = datetime.fromisoformat(existing["scheduled_start"])
+    captured = datetime.fromisoformat(snapshot.captured_at)
+    if captured >= scheduled_start:
+        raise ValueError("wide odds snapshot must be captured before scheduled start")
+    return _write_once(
+        Path(root) / snapshot.race_id / "PRE_RACE" / "wide_odds_snapshot.json",
+        asdict(snapshot),
     )
 
 

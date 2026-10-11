@@ -6,8 +6,10 @@ from racing_lambda.four_horse_extraction import (
     EXTRACTION_METHOD,
     ExtractionResult,
     FourHorseExtraction,
+    WideOddsSnapshot,
     evaluate_four_horse_extraction,
     freeze_four_horse_extraction,
+    freeze_wide_odds_snapshot,
     settle_four_horse_extraction,
     wide_pair_key,
 )
@@ -207,6 +209,60 @@ def test_write_once_prevents_posthoc_prediction_overwrite(tmp_path):
     assert path.exists()
     with pytest.raises(FileExistsError):
         freeze_four_horse_extraction(tmp_path, p)
+
+
+def _wide_odds_snapshot(prediction, **overrides):
+    start = datetime.fromisoformat(prediction.scheduled_start)
+    defaults = dict(
+        race_id=prediction.race_id,
+        horses=prediction.horses,
+        captured_at=(start - timedelta(hours=1)).isoformat(),
+        wide_odds={
+            "3-8": 6.5, "5-8": 7.0, "2-8": 8.0, "3-5": 5.5, "2-3": 9.0, "2-5": 6.0,
+        },
+    )
+    defaults.update(overrides)
+    return WideOddsSnapshot(**defaults)
+
+
+def test_wide_odds_snapshot_requires_existing_frozen_prediction(tmp_path):
+    p = _prediction()
+    with pytest.raises(FileNotFoundError):
+        freeze_wide_odds_snapshot(tmp_path, _wide_odds_snapshot(p))
+
+
+def test_wide_odds_snapshot_must_match_frozen_horses(tmp_path):
+    p = _prediction()
+    freeze_four_horse_extraction(tmp_path, p)
+    snapshot = _wide_odds_snapshot(
+        p,
+        horses=("1", "2", "3", "4"),
+        wide_odds={
+            "1-2": 6.5, "1-3": 7.0, "1-4": 8.0, "2-3": 5.5, "2-4": 9.0, "3-4": 6.0,
+        },
+    )
+    with pytest.raises(ValueError, match="must match the frozen PRE_RACE selection"):
+        freeze_wide_odds_snapshot(tmp_path, snapshot)
+
+
+def test_wide_odds_snapshot_must_be_captured_before_scheduled_start(tmp_path):
+    p = _prediction()
+    freeze_four_horse_extraction(tmp_path, p)
+    start = datetime.fromisoformat(p.scheduled_start)
+    snapshot = _wide_odds_snapshot(p, captured_at=start.isoformat())
+    with pytest.raises(ValueError, match="must be captured before scheduled start"):
+        freeze_wide_odds_snapshot(tmp_path, snapshot)
+
+
+def test_wide_odds_snapshot_does_not_touch_frozen_prediction(tmp_path):
+    p = _prediction()
+    pre_race_path = freeze_four_horse_extraction(tmp_path, p)
+    before = pre_race_path.read_text(encoding="utf-8")
+    snapshot_path = freeze_wide_odds_snapshot(tmp_path, _wide_odds_snapshot(p))
+    assert snapshot_path != pre_race_path
+    assert pre_race_path.read_text(encoding="utf-8") == before
+    with pytest.raises(FileExistsError):
+        freeze_wide_odds_snapshot(tmp_path, _wide_odds_snapshot(p))
 
 
 def test_clean_top3_hit_scores_all_bet_types(tmp_path):
