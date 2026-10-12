@@ -27,6 +27,7 @@ from .four_horse_extraction import (
     freeze_wide_odds_snapshot,
     settle_four_horse_extraction,
     wide_pair_key,
+    winning_wide_combo_odds,
 )
 from .freeze import freeze_prediction, load_frozen_prediction
 from .jra_favorite_statistics import (
@@ -198,4 +199,5 @@ __all__ = [
     "validate_record",
     "validation_summary_2026_09_06",
     "wide_pair_key",
+    "winning_wide_combo_odds",
 ]

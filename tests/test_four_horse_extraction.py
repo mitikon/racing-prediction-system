@@ -12,6 +12,7 @@ from racing_lambda.four_horse_extraction import (
     freeze_wide_odds_snapshot,
     settle_four_horse_extraction,
     wide_pair_key,
+    winning_wide_combo_odds,
 )
 
 
@@ -168,12 +169,23 @@ def test_wide_odds_is_optional_and_defaults_empty():
 
 def test_wide_odds_must_cover_all_six_pairs_of_selected_horses():
     # horses=("8", "3", "5", "2") の6通りのうち1組だけ欠けている
-    with pytest.raises(ValueError, match="wide_odds, once recorded, must cover all 6 pairs"):
+    with pytest.raises(ValueError, match="wide_odds, once recorded, must include at least the 6 pairs"):
         _prediction(
             wide_odds={
                 "3-8": 6.5, "5-8": 7.0, "2-8": 8.0, "3-5": 5.5, "2-3": 9.0,
             }
         )
+
+
+def test_wide_odds_accepts_extra_pairs_beyond_the_required_six():
+    # 全通りのオッズボードを添付された場合、6点以外の組み合わせも保存できる
+    prediction = _prediction(
+        wide_odds={
+            "3-8": 6.5, "5-8": 7.0, "2-8": 8.0, "3-5": 5.5, "2-3": 9.0, "2-5": 6.0,
+            "1-8": 12.0,  # 選出4頭に含まれない馬との組み合わせ
+        }
+    )
+    assert prediction.wide_odds["1-8"] == 12.0
 
 
 def test_wide_odds_rejects_odds_at_or_below_one():
@@ -263,6 +275,49 @@ def test_wide_odds_snapshot_does_not_touch_frozen_prediction(tmp_path):
     assert pre_race_path.read_text(encoding="utf-8") == before
     with pytest.raises(FileExistsError):
         freeze_wide_odds_snapshot(tmp_path, _wide_odds_snapshot(p))
+
+
+def test_wide_odds_snapshot_accepts_full_board_beyond_the_required_six(tmp_path):
+    p = _prediction()
+    freeze_four_horse_extraction(tmp_path, p)
+    snapshot = _wide_odds_snapshot(
+        p,
+        wide_odds={
+            "3-8": 6.5, "5-8": 7.0, "2-8": 8.0, "3-5": 5.5, "2-3": 9.0, "2-5": 6.0,
+            "1-4": 29.6,  # 選出4頭に含まれない馬同士の組み合わせ(全通り添付を想定)
+        },
+    )
+    path = freeze_wide_odds_snapshot(tmp_path, snapshot)
+    assert path.exists()
+
+
+def test_winning_wide_combo_odds_returns_odds_for_actual_top3_pairs():
+    # 2026-10-12京都11Rの実例: 予想4頭は{15,9,13,2}だが的中は1-4-9
+    finishing_order = ("1", "4", "9", "8", "15")
+    wide_odds = {
+        wide_pair_key("1", "4"): 29.6,
+        wide_pair_key("1", "9"): 5.6,
+        wide_pair_key("4", "9"): 11.9,
+        wide_pair_key("9", "15"): 7.4,  # 的中以外の組み合わせは無視される
+    }
+    result = winning_wide_combo_odds(finishing_order, wide_odds)
+    assert result == {
+        wide_pair_key("1", "4"): 29.6,
+        wide_pair_key("1", "9"): 5.6,
+        wide_pair_key("4", "9"): 11.9,
+    }
+
+
+def test_winning_wide_combo_odds_omits_pairs_not_recorded():
+    finishing_order = ("1", "4", "9")
+    wide_odds = {wide_pair_key("1", "9"): 5.6}  # 1-4, 4-9は未記録
+    result = winning_wide_combo_odds(finishing_order, wide_odds)
+    assert result == {wide_pair_key("1", "9"): 5.6}
+
+
+def test_winning_wide_combo_odds_requires_at_least_top3():
+    with pytest.raises(ValueError):
+        winning_wide_combo_odds(("1", "4"), {})
 
 
 def test_clean_top3_hit_scores_all_bet_types(tmp_path):

@@ -147,11 +147,11 @@ class FourHorseExtraction:
             expected_pairs = {
                 wide_pair_key(a, b) for a, b in combinations(self.horses, 2)
             }
-            if set(self.wide_odds) != expected_pairs:
+            missing_pairs = expected_pairs - set(self.wide_odds)
+            if missing_pairs:
                 raise ValueError(
-                    "wide_odds, once recorded, must cover all 6 pairs among the "
-                    f"selected four horses: expected {sorted(expected_pairs)}, "
-                    f"got {sorted(self.wide_odds)}"
+                    "wide_odds, once recorded, must include at least the 6 pairs "
+                    f"among the selected four horses: missing {sorted(missing_pairs)}"
                 )
             if any(odds <= 1.0 for odds in self.wide_odds.values()):
                 raise ValueError("decimal wide odds in wide_odds must be greater than 1")
@@ -175,6 +175,15 @@ class WideOddsSnapshot:
     オッズだけを別ファイルとして追記するためのもの。「結果を見てから
     書き換える」後付けとは異なり、発走前であることを``freeze_wide_odds_snapshot``
     が検証する。
+
+    ``wide_odds``は選出4頭から作れる6通りを最低限含んでいればよく、
+    それ以上の組み合わせ(共有いただいた全通りのオッズボード全体)を
+    含めても構わない(2026-10-12、超過分を許容するよう変更)。実際の
+    的中3通りが選出4頭の外側の馬同士の組み合わせになるケースがあり
+    (例: 2026-10-12京都11R、的中は1-4-9で予想4頭のうち9しか含まない)、
+    6点だけの記録では的中組み合わせのオッズを事後に振り返られない
+    ことが分かったため、全通りを添付いただいた場合はそのまま保存できる
+    ようにした。
     """
 
     race_id: str
@@ -189,10 +198,11 @@ class WideOddsSnapshot:
         if len(self.horses) != EXTRACTION_COUNT or len(set(self.horses)) != EXTRACTION_COUNT:
             raise ValueError(f"horses must contain exactly {EXTRACTION_COUNT} unique picks")
         expected_pairs = {wide_pair_key(a, b) for a, b in combinations(self.horses, 2)}
-        if set(self.wide_odds) != expected_pairs:
+        missing_pairs = expected_pairs - set(self.wide_odds)
+        if missing_pairs:
             raise ValueError(
-                "wide_odds must cover all 6 pairs among the selected four horses: "
-                f"expected {sorted(expected_pairs)}, got {sorted(self.wide_odds)}"
+                "wide_odds must include at least the 6 pairs among the selected "
+                f"four horses: missing {sorted(missing_pairs)}"
             )
         if any(odds <= 1.0 for odds in self.wide_odds.values()):
             raise ValueError("decimal wide odds must be greater than 1")
@@ -370,6 +380,31 @@ def freeze_wide_odds_snapshot(
         Path(root) / snapshot.race_id / "PRE_RACE" / "wide_odds_snapshot.json",
         asdict(snapshot),
     )
+
+
+def winning_wide_combo_odds(
+    finishing_order: Sequence[str], wide_odds: Mapping[str, float]
+) -> dict[str, float]:
+    """確定着順の上位3頭から実際に的中したワイド3通りを求め、記録済みの
+    `wide_odds`(`WideOddsSnapshot.wide_odds`等)の中に値があればそれを
+    返す(的中パターンの事後学習用)。
+
+    的中した組み合わせが選出4頭の外側の馬同士になるケースがあるため
+    (例: 2026-10-12京都11Rの的中1-4-9は予想4頭のうち9しか含まない)、
+    全通りを記録していないと一部の組み合わせがこの関数の戻り値に
+    含まれないことがある。結果を見てからこの関数で予想や記録済み
+    オッズそのものを書き換えることはなく、あくまで事後の参考値を
+    取り出すだけの読み取り専用のヘルパーである。
+    """
+    top3 = tuple(finishing_order[:3])
+    if len(top3) < 3:
+        raise ValueError("finishing_order requires at least top3")
+    result: dict[str, float] = {}
+    for horse_a, horse_b in combinations(top3, 2):
+        key = wide_pair_key(horse_a, horse_b)
+        if key in wide_odds:
+            result[key] = wide_odds[key]
+    return result
 
 
 def settle_four_horse_extraction(
