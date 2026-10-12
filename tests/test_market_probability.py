@@ -4,10 +4,12 @@ from racing_lambda.market_probability import (
     FavoriteGapComparison,
     MarketProbability,
     OddsGapProbability,
+    WideMarketConcentration,
     WideMarketDistortion,
     compare_favorite_and_runner_up,
     estimate_favorite_top3_probability,
     estimate_market_top3_probabilities,
+    estimate_wide_market_concentration,
     estimate_wide_market_distortion,
     harville_pair_top3_probability,
     harville_top3_probabilities,
@@ -241,3 +243,40 @@ def test_estimate_wide_market_distortion_rejects_pair_referencing_unknown_horse(
     wide_odds = {"1-9": 5.0}
     with pytest.raises(ValueError, match="references a horse not in win_odds"):
         estimate_wide_market_distortion(odds, wide_odds)
+
+
+def test_wide_market_concentration_is_near_zero_for_uniform_odds():
+    wide_odds = {f"{i}-{i+1}": 10.0 for i in range(1, 10)}
+    result = estimate_wide_market_concentration(wide_odds)
+    assert isinstance(result, WideMarketConcentration)
+    assert result.gini_coefficient == pytest.approx(0.0, abs=1e-9)
+    assert result.pair_count == 9
+
+
+def test_wide_market_concentration_rises_with_a_single_cheap_outlier():
+    uniform = {f"{i}-{i+1}": 50.0 for i in range(1, 15)}
+    flat_gini = estimate_wide_market_concentration(uniform).gini_coefficient
+
+    skewed = dict(uniform)
+    skewed["1-2"] = 1.5  # 一点だけ極端に安い(大口投資が集中したと見立てる)
+    skewed_gini = estimate_wide_market_concentration(skewed).gini_coefficient
+
+    assert skewed_gini > flat_gini
+
+
+def test_wide_market_concentration_identifies_cheapest_pair_and_median():
+    wide_odds = {"1-2": 2.0, "3-4": 10.0, "5-6": 40.0}
+    result = estimate_wide_market_concentration(wide_odds)
+    assert result.cheapest_pair == "1-2"
+    assert result.cheapest_odds == pytest.approx(2.0)
+    assert result.median_odds == pytest.approx(10.0)
+
+
+def test_wide_market_concentration_requires_at_least_two_pairs():
+    with pytest.raises(ValueError):
+        estimate_wide_market_concentration({"1-2": 5.0})
+
+
+def test_wide_market_concentration_rejects_odds_at_or_below_one():
+    with pytest.raises(ValueError):
+        estimate_wide_market_concentration({"1-2": 1.0, "3-4": 5.0})

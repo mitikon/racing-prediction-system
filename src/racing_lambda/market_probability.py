@@ -321,3 +321,62 @@ def estimate_wide_market_distortion(
             )
         )
     return sorted(results, key=lambda row: -row.distortion_ratio)
+
+
+@dataclass(frozen=True)
+class WideMarketConcentration:
+    pair_count: int
+    gini_coefficient: float
+    cheapest_pair: str
+    cheapest_odds: float
+    median_odds: float
+
+
+def estimate_wide_market_concentration(wide_odds: Mapping[str, float]) -> WideMarketConcentration:
+    """ワイド全通りオッズの分布から、市場(大口投資を含む)がこのレースを
+    どれだけ絞り込めているかを示す参考値を求める(2026-10-12追加、ユーザー
+    提案)。
+
+    「儲かる確信が高いレースほど大口投資が少数の組み合わせに資金を
+    集中させ、難しいレースほど投資を手控えて全体的にオッズが横並びに
+    分散する」という仮説を検証する目的。全組み合わせのインプライド確率
+    (1/オッズ、オーバーラウンド未補正)のジニ係数を集中度の指標として
+    用いる。ジニ係数が1に近いほど一部の組み合わせにオッズが極端に
+    偏っており(=市場が絞り込めている)、0に近いほど全体的に横並びで
+    market が絞り込めていないことを示す。
+
+    この指標は特定レースの結果に合わせて作った係数ではなく、全組み合わせ
+    のオッズそのものから計算する純粋な分布の統計量であり、「絞り込めて
+    いるレースほど当てやすい」という仮説自体はまだ検証段階。予想4頭
+    抽出方式には自動接続しない。narrowing(予想4頭の6点だけに絞った
+    記録)ではこの指標は正しく計算できないため、全通りのオッズボードの
+    記録が前提となる。
+    """
+    if len(wide_odds) < 2:
+        raise ValueError("estimate_wide_market_concentration requires at least 2 pairs")
+    if any(odds <= 1.0 for odds in wide_odds.values()):
+        raise ValueError("decimal wide odds must be greater than 1")
+
+    implied = {pair: 1.0 / float(odds) for pair, odds in wide_odds.items()}
+    values = sorted(implied.values())
+    n = len(values)
+    total = sum(values)
+    cumulative = sum((index + 1) * value for index, value in enumerate(values))
+    gini = (2.0 * cumulative) / (n * total) - (n + 1) / n
+
+    cheapest_pair = min(wide_odds, key=lambda pair: wide_odds[pair])
+    sorted_odds = sorted(float(odds) for odds in wide_odds.values())
+    mid = n // 2
+    median_odds = (
+        sorted_odds[mid]
+        if n % 2 == 1
+        else (sorted_odds[mid - 1] + sorted_odds[mid]) / 2.0
+    )
+
+    return WideMarketConcentration(
+        pair_count=n,
+        gini_coefficient=round(gini, 6),
+        cheapest_pair=cheapest_pair,
+        cheapest_odds=float(wide_odds[cheapest_pair]),
+        median_odds=round(median_odds, 4),
+    )
