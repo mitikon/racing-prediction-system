@@ -57,6 +57,12 @@ from .odds_movement_alert import (
     detect_sudden_odds_movement,
     scan_field_for_sudden_movement,
 )
+from .wide_odds_movement_alert import (
+    SUDDEN_WIDE_MOVEMENT_THRESHOLD,
+    WideOddsMovementAlert,
+    detect_sudden_wide_odds_movement,
+    scan_wide_odds_for_sudden_movement,
+)
 from .jra_official_free_ingestion import (
     OfficialSnapshot,
     freeze_snapshot,
@@ -153,10 +159,12 @@ __all__ = [
     "StatisticalLeadingSignal",
     "StatisticalSignalInput",
     "SUDDEN_MOVEMENT_THRESHOLD",
+    "SUDDEN_WIDE_MOVEMENT_THRESHOLD",
     "ThreeRaceValidationReport",
     "TwoLayerSignal",
     "VALIDATION_RECORDS_2026_09_06",
     "WideMarketDistortion",
+    "WideOddsMovementAlert",
     "WideOddsSnapshot",
     "WsiLearningSummary",
     "body_weight_fit",
@@ -170,6 +178,7 @@ __all__ = [
     "combine_two_layers",
     "compare_favorite_and_runner_up",
     "detect_sudden_odds_movement",
+    "detect_sudden_wide_odds_movement",
     "estimate_favorite_top3_probability",
     "estimate_market_top3_probabilities",
     "estimate_wide_market_distortion",
@@ -195,6 +204,7 @@ __all__ = [
     "recent_form_score",
     "run_frozen_backtest",
     "scan_field_for_sudden_movement",
+    "scan_wide_odds_for_sudden_movement",
     "settle_four_horse_extraction",
     "validate_record",
     "validation_summary_2026_09_06",

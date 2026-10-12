@@ -273,8 +273,29 @@ def test_wide_odds_snapshot_does_not_touch_frozen_prediction(tmp_path):
     snapshot_path = freeze_wide_odds_snapshot(tmp_path, _wide_odds_snapshot(p))
     assert snapshot_path != pre_race_path
     assert pre_race_path.read_text(encoding="utf-8") == before
-    with pytest.raises(FileExistsError):
-        freeze_wide_odds_snapshot(tmp_path, _wide_odds_snapshot(p))
+
+
+def test_wide_odds_snapshot_allows_multiple_timed_captures_per_race(tmp_path):
+    # 早い時点・締切直前など、1レースにつき複数回の撮影を想定する
+    p = _prediction()
+    freeze_four_horse_extraction(tmp_path, p)
+    first = freeze_wide_odds_snapshot(tmp_path, _wide_odds_snapshot(p))
+    second = freeze_wide_odds_snapshot(
+        tmp_path,
+        _wide_odds_snapshot(
+            p,
+            captured_at=(
+                datetime.fromisoformat(p.scheduled_start) - timedelta(minutes=5)
+            ).isoformat(),
+            wide_odds={
+                "3-8": 4.0, "5-8": 7.0, "2-8": 8.0, "3-5": 5.5, "2-3": 9.0, "2-5": 6.0,
+            },
+        ),
+    )
+    assert first.name == "wide_odds_snapshot.json"
+    assert second.name == "wide_odds_snapshot_2.json"
+    assert first.exists() and second.exists()
+    assert first.read_text(encoding="utf-8") != second.read_text(encoding="utf-8")
 
 
 def test_wide_odds_snapshot_accepts_full_board_beyond_the_required_six(tmp_path):

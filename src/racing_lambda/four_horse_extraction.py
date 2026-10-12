@@ -360,6 +360,12 @@ def freeze_wide_odds_snapshot(
     対象レースのPRE_RACEがすでに凍結されていること、選出4頭が完全に
     一致すること、発走予定時刻より前に確認したものであることを検証
     してから書き込む。``four_horse_extraction.json``自体は一切変更しない。
+
+    1レースにつき複数回(早い時点・締切直前など)呼び出すことができる。
+    各回は``wide_odds_snapshot.json``・``wide_odds_snapshot_2.json``...と
+    連番で書き込み専用保存され、過去の回を上書きすることはない。これにより
+    2時点のオッズを`wide_odds_movement_alert.py`で比較し、大口投資による
+    締切直前の急変動を検出できる。
     """
     pre_race_path = Path(root) / snapshot.race_id / "PRE_RACE" / "four_horse_extraction.json"
     if not pre_race_path.exists():
@@ -376,10 +382,11 @@ def freeze_wide_odds_snapshot(
     captured = datetime.fromisoformat(snapshot.captured_at)
     if captured >= scheduled_start:
         raise ValueError("wide odds snapshot must be captured before scheduled start")
-    return _write_once(
-        Path(root) / snapshot.race_id / "PRE_RACE" / "wide_odds_snapshot.json",
-        asdict(snapshot),
-    )
+    pre_race_dir = Path(root) / snapshot.race_id / "PRE_RACE"
+    existing_snapshots = sorted(pre_race_dir.glob("wide_odds_snapshot*.json"))
+    sequence = len(existing_snapshots) + 1
+    filename = "wide_odds_snapshot.json" if sequence == 1 else f"wide_odds_snapshot_{sequence}.json"
+    return _write_once(pre_race_dir / filename, asdict(snapshot))
 
 
 def winning_wide_combo_odds(
