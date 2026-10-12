@@ -1,0 +1,17 @@
+{
+  "checksum_sha256": "0da3a7840a567e45056983f90fa2db231b2afc65a16a56e6cee733344ccddb5a",
+  "exact_top3_set_hit": false,
+  "failure_categories": [
+    "抽出漏れ",
+    "過大評価"
+  ],
+  "near_miss_horses": [],
+  "race_id": "20261012-KYOTO-11",
+  "recovery_rate": null,
+  "sanrenpuku_hit": false,
+  "sanrentan_hit": false,
+  "top3_hits": 1,
+  "umaren_hit": false,
+  "wide_hit": false,
+  "winner_captured": false
+}
