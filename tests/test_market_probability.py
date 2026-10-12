@@ -4,9 +4,12 @@ from racing_lambda.market_probability import (
     FavoriteGapComparison,
     MarketProbability,
     OddsGapProbability,
+    WideMarketDistortion,
     compare_favorite_and_runner_up,
     estimate_favorite_top3_probability,
     estimate_market_top3_probabilities,
+    estimate_wide_market_distortion,
+    harville_pair_top3_probability,
     harville_top3_probabilities,
     implied_win_probabilities,
     rank_odds_gap_probabilities,
@@ -181,3 +184,60 @@ def test_rank_odds_gap_probabilities_middle_horse_has_both_neighbors_consistent(
     assert second.probability_gap_to_longer == pytest.approx(
         second.estimated_top3_probability - third.estimated_top3_probability
     )
+
+
+def test_harville_pair_top3_probability_is_certain_in_a_three_horse_field():
+    probs = {"1": 0.5, "2": 0.3, "3": 0.2}
+    assert harville_pair_top3_probability(probs, "1", "2") == pytest.approx(1.0, abs=1e-9)
+
+
+def test_harville_pair_top3_probability_never_exceeds_either_marginal():
+    probs = {"1": 0.4, "2": 0.3, "3": 0.2, "4": 0.1}
+    marginals = harville_top3_probabilities(probs)
+    pair_p = harville_pair_top3_probability(probs, "1", "4")
+    assert pair_p <= marginals["1"] + 1e-9
+    assert pair_p <= marginals["4"] + 1e-9
+
+
+def test_harville_pair_top3_probability_rejects_same_horse():
+    probs = {"1": 0.4, "2": 0.3, "3": 0.2, "4": 0.1}
+    with pytest.raises(ValueError):
+        harville_pair_top3_probability(probs, "1", "1")
+
+
+def test_harville_pair_top3_probability_rejects_unknown_horse():
+    probs = {"1": 0.4, "2": 0.3, "3": 0.2, "4": 0.1}
+    with pytest.raises(ValueError):
+        harville_pair_top3_probability(probs, "1", "9")
+
+
+def test_harville_pair_top3_probability_rejects_fewer_than_three_horses():
+    probs = {"1": 0.5, "2": 0.5}
+    with pytest.raises(ValueError):
+        harville_pair_top3_probability(probs, "1", "2")
+
+
+def test_estimate_wide_market_distortion_covers_every_pair_with_both_horses():
+    odds = {"1": 2.0, "2": 4.0, "3": 6.0, "4": 10.0}
+    wide_odds = {"1-2": 1.8, "3-4": 25.0}
+    rows = estimate_wide_market_distortion(odds, wide_odds)
+    assert {row.horse_a for row in rows} == {"1", "3"}
+    assert {row.horse_b for row in rows} == {"2", "4"}
+    assert isinstance(rows[0], WideMarketDistortion)
+
+
+def test_estimate_wide_market_distortion_flags_underpriced_combo_above_one():
+    # 3-4は長オッズ同士の組み合わせで、Harville理論値は低い。
+    # それでも市場のワイドオッズが極端に低い(=市場織り込み確率が高い)場合、
+    # distortion_ratioが1を大きく超えることを確認する。
+    odds = {"1": 2.0, "2": 4.0, "3": 6.0, "4": 10.0}
+    wide_odds = {"3-4": 1.5}
+    rows = estimate_wide_market_distortion(odds, wide_odds)
+    assert rows[0].distortion_ratio > 1.0
+
+
+def test_estimate_wide_market_distortion_rejects_pair_referencing_unknown_horse():
+    odds = {"1": 2.0, "2": 4.0, "3": 6.0}
+    wide_odds = {"1-9": 5.0}
+    with pytest.raises(ValueError, match="references a horse not in win_odds"):
+        estimate_wide_market_distortion(odds, wide_odds)

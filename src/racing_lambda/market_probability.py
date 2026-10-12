@@ -17,6 +17,7 @@ JRA統計で一般に知られる傾向として、同じ「1番人気」でも�
 from __future__ import annotations
 
 from dataclasses import dataclass
+from itertools import permutations
 from typing import Mapping
 
 
@@ -225,3 +226,98 @@ def rank_odds_gap_probabilities(win_odds: Mapping[str, float]) -> list[OddsGapPr
             )
         )
     return result
+
+
+def harville_pair_top3_probability(
+    win_probabilities: Mapping[str, float], horse_a: str, horse_b: str
+) -> float:
+    """Harvilleモデルで、horse_aとhorse_bの両方が3着以内に入る確率(ワイド
+    の理論的中確率)を推定する。
+
+    `harville_top3_probabilities`が各馬単独の3着以内確率(周辺確率)を
+    求めるのに対し、この関数は2頭の同時確率を求める。出走全馬の勝率
+    (合計1に正規化済み)の中から、horse_a・horse_bの両方を含む3着以内
+    の組み合わせになる確率を、起こりうる全順列について合算する。
+    """
+    if horse_a == horse_b:
+        raise ValueError("horse_a and horse_b must be different horses")
+    if horse_a not in win_probabilities or horse_b not in win_probabilities:
+        raise ValueError("both horses must be present in win_probabilities")
+    if len(win_probabilities) < 3:
+        raise ValueError("harville_pair_top3_probability requires at least 3 horses")
+    total = sum(win_probabilities.values())
+    if abs(total - 1.0) > 1e-6:
+        raise ValueError("win_probabilities must sum to 1")
+
+    p = win_probabilities
+    others = [horse_id for horse_id in win_probabilities if horse_id not in (horse_a, horse_b)]
+    joint = 0.0
+    for third in others:
+        for first, second, last in permutations((horse_a, horse_b, third)):
+            remaining_after_first = 1.0 - p[first]
+            if remaining_after_first <= 0.0:
+                continue
+            remaining_after_second = remaining_after_first - p[second]
+            if remaining_after_second <= 0.0:
+                continue
+            joint += (
+                p[first]
+                * (p[second] / remaining_after_first)
+                * (p[last] / remaining_after_second)
+            )
+    return joint
+
+
+@dataclass(frozen=True)
+class WideMarketDistortion:
+    horse_a: str
+    horse_b: str
+    harville_pair_top3_probability: float
+    market_wide_odds: float
+    market_implied_probability: float
+    distortion_ratio: float
+
+
+def estimate_wide_market_distortion(
+    win_odds: Mapping[str, float], wide_odds: Mapping[str, float]
+) -> list[WideMarketDistortion]:
+    """単勝市場とワイド市場という2つの独立したオッズ市場を突き合わせ、
+    両者の織り込み確率に歪みがないかを確認する(2026-10-12追加)。
+
+    `win_odds`(出走全馬の単勝オッズ)からHarvilleモデルで「horse_aと
+    horse_bの両方が3着以内に入る確率」を理論値として求め、`wide_odds`
+    (`wide_pair_key`形式のキーを持つ実際のワイドオッズ)が示す市場
+    織り込み確率(オーバーラウンド補正なしの素朴な1/オッズ)と比較する。
+
+    `distortion_ratio`(市場織り込み確率 ÷ Harville理論値)が1より
+    大きい組み合わせは、ワイド市場が単勝オッズ由来の理論値より「甘く」
+    評価している(相対的に割安)ことを示す参考値。逆に1より小さければ
+    ワイド市場の方が厳しく評価していることになる。単勝市場とワイド
+    市場は本来別々の投票によって形成されるため、両者が一致する保証は
+    なく、乖離自体が展開・脚質など単勝オッズだけでは説明できない何かを
+    市場参加者が織り込んでいる可能性を示唆するに過ぎない。特定レースの
+    結果に合わせた係数は一切使っておらず、予想4頭抽出方式には自動接続
+    しない。wide_oddsの記録自体が2026-10-11開始したばかりで蓄積が
+    浅いため、歪みと実際の的中パターンの関係を論じるにはまだ材料が
+    不足している。
+    """
+    win_probs = implied_win_probabilities(win_odds)
+    results: list[WideMarketDistortion] = []
+    for pair_key, odds in wide_odds.items():
+        horse_a, horse_b = pair_key.split("-")
+        if horse_a not in win_probs or horse_b not in win_probs:
+            raise ValueError(f"wide_odds pair {pair_key!r} references a horse not in win_odds")
+        harville_p = harville_pair_top3_probability(win_probs, horse_a, horse_b)
+        market_p = 1.0 / float(odds)
+        ratio = market_p / harville_p if harville_p > 0 else float("inf")
+        results.append(
+            WideMarketDistortion(
+                horse_a=horse_a,
+                horse_b=horse_b,
+                harville_pair_top3_probability=round(harville_p, 6),
+                market_wide_odds=float(odds),
+                market_implied_probability=round(market_p, 6),
+                distortion_ratio=round(ratio, 4),
+            )
+        )
+    return sorted(results, key=lambda row: -row.distortion_ratio)
