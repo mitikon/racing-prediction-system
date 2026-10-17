@@ -1,0 +1,18 @@
+{
+  "checksum_sha256": "0e3b559e433a3f40f96652a22eb42e4b9b588c433d01bd580ee4c64d424ca5a5",
+  "exact_top3_set_hit": false,
+  "failure_categories": [
+    "抽出漏れ",
+    "過大評価",
+    "最終除外候補が的中圏"
+  ],
+  "near_miss_horses": [],
+  "race_id": "20261017-TOKYO-11",
+  "recovery_rate": null,
+  "sanrenpuku_hit": false,
+  "sanrentan_hit": false,
+  "top3_hits": 1,
+  "umaren_hit": false,
+  "wide_hit": false,
+  "winner_captured": false
+}

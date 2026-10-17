@@ -1,0 +1,25 @@
+{
+  "checksum_sha256": "f0c1cd0c075aae83d0b1a608eafb59b3f71d24063d88a7e0010fae0def07ff97",
+  "finishing_order": [
+    "13",
+    "10",
+    "14",
+    "8",
+    "6",
+    "5",
+    "7",
+    "11",
+    "9",
+    "1",
+    "2",
+    "4",
+    "3",
+    "12"
+  ],
+  "payouts": null,
+  "race_id": "20261017-TOKYO-11",
+  "return_yen": null,
+  "schema_version": 1,
+  "settled_at": "2026-10-18T04:02:36.152511+09:00",
+  "stake_yen": null
+}

@@ -1,0 +1,29 @@
+{
+  "checksum_sha256": "cbf1e46402c037965a639e1b46bf028763e5268a9ec8fdd90834183582b911d6",
+  "finishing_order": [
+    "11",
+    "2",
+    "14",
+    "10",
+    "13",
+    "9",
+    "6",
+    "5",
+    "18",
+    "4",
+    "12",
+    "15",
+    "7",
+    "16",
+    "3",
+    "1",
+    "8",
+    "17"
+  ],
+  "payouts": null,
+  "race_id": "20261004-KYOTO-12",
+  "return_yen": null,
+  "schema_version": 1,
+  "settled_at": "2026-10-04T20:34:17.716150+00:00",
+  "stake_yen": null
+}

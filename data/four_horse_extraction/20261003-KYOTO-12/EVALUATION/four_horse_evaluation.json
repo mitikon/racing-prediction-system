@@ -1,0 +1,21 @@
+{
+  "checksum_sha256": "60001b9a201cbedb69b41b8b6f48ef3fd1dbb537434aef4347f37a9c71236977",
+  "exact_top3_set_hit": false,
+  "failure_categories": [
+    "抽出漏れ",
+    "着順僅差の取りこぼし",
+    "過大評価",
+    "最終除外候補が的中圏"
+  ],
+  "near_miss_horses": [
+    "13"
+  ],
+  "race_id": "20261003-KYOTO-12",
+  "recovery_rate": null,
+  "sanrenpuku_hit": false,
+  "sanrentan_hit": false,
+  "top3_hits": 1,
+  "umaren_hit": false,
+  "wide_hit": false,
+  "winner_captured": true
+}
