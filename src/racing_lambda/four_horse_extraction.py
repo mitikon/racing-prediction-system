@@ -1,0 +1,432 @@
+"""写真・出馬表・プロンプトを起点とする予想4頭抽出方式。
+
+部分空間正則化PCA（`regularized_pca.py`のC_reg = 0.10*C_recent + 0.90*C_prior）を
+中核とする本格・簡易式先行予測λとは完全に独立した、新しい予想方式。
+
+## 位置づけ
+- 入力: 出馬表の写真・成績欄の写真、または対象レースを指定したプロンプト
+- 予想の生成: 定量式（PCA等）ではなく、写真・プロンプトを読んだ人間またはLLMによる
+  直接判断で4頭を抽出する。このモジュール自体はスコアを計算しない。
+- このモジュールの役割: その4頭抽出予想を発走前に凍結保存し、結果判明後に
+  馬券種別（馬連・ワイド・三連複・三連単）ごとの的中を機械的に判定し、
+  「1着4着」のような僅差の的中漏れを定量記録すること。
+
+既存の`verification_room.py`（本格・簡易式λのTop5方式）とは別スキーマ・別ファイル名で
+並行運用し、どちらの方式が実戦で成績が良いかを同じレースで比較できるようにする。
+本格・簡易式λの既存コード・固定係数は一切変更しない。
+"""
+
+from __future__ import annotations
+
+from dataclasses import asdict, dataclass, field
+from datetime import datetime
+from hashlib import sha256
+from itertools import combinations
+import json
+from pathlib import Path
+from typing import Any, Mapping, Sequence
+
+EXTRACTION_METHOD = "photo_prompt_manual_extraction"
+EXTRACTION_COUNT = 4
+
+
+def wide_pair_key(horse_a: str, horse_b: str) -> str:
+    """ワイドの組み合わせを馬番の数値順に正規化した一意キーへ変換する。
+
+    ``"4-11"``のように小さい方の馬番を先に置く(文字列の辞書順だと
+    ``"11" < "4"``になってしまうため、整数として比較する)。
+    """
+    a, b = sorted((horse_a, horse_b), key=int)
+    return f"{a}-{b}"
+
+
+def _canonical(payload: Mapping[str, Any]) -> bytes:
+    return json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    ).encode("utf-8")
+
+
+@dataclass(frozen=True)
+class FourHorseExtraction:
+    """予想4頭抽出方式の凍結予測。
+
+    ``reviewed_horse_numbers``は出走全馬の馬番を含まなければならない。
+    一部の目立つ馬だけを見て4頭を選ぶことを防ぎ、大衆と同じ公開情報
+    (出馬表・オッズ・馬体重・直近成績・騎手/調教師/生産牧場)を出走馬
+    全頭について漏れなく確認したことをコードで強制する。
+
+    ``running_styles``は出走全馬について、人気・オッズに一切関係なく
+    脚質（逃げ・先行・差し・追込等）を記録したものでなければならない。
+    2026-09-27スプリンターズSの答え合わせで、人気馬・直近好タイムの
+    馬を偏重し、中位人気の先行馬が実際には展開の恩恵を受けて上位に
+    残る可能性を軽視した反省から追加した。特定レースの結果に合わせて
+    「穴馬を当てる」ロジックではなく、今後のどのレースにも同じ形で
+    適用する一般ルールとして、人気に関わらず全頭の脚質と想定される
+    ペース（``pace_scenario``）を明示的に記録させることで、判断が
+    オッズ・人気の言い訳に流れることを防ぐ。
+
+    ``win_odds``は任意項目で、出走全馬の単勝オッズを記録する
+    （2026-10-10追加）。一部の馬のオッズだけを``evidence_notes``の
+    自由記述に埋め込む従来の運用では、後から``market_probability.py``の
+    全馬向けツール（``rank_odds_gap_probabilities``等）で検証できなかった
+    反省から追加した。記録する場合は出走全馬（``reviewed_horse_numbers``と
+    同一集合）のオッズが揃っていなければならない。空のままでも良いが、
+    一部の馬だけを記録することは禁止する。
+
+    ``wide_odds``も任意項目で、選出した4頭から作れる組み合わせ6通り
+    （4C2）それぞれのワイド最低オッズを``wide_pair_key(horse_a, horse_b)``
+    をキーとして記録する（2026-10-11追加）。「ワイドの最低オッズが
+    一定値以上の時だけ4頭BOXで購入する」という実際の馬券戦略を、
+    結果判明後にオッズ条件込みで検証できるようにする目的。出走全馬の
+    組み合わせ全てを記録する必要はなく、選出4頭のBOX6点のみを対象と
+    する。記録する場合は6通り全てが揃っていなければならない。
+    """
+
+    race_id: str
+    race_name: str
+    venue: str
+    scheduled_start: str
+    frozen_at: str
+    horses: tuple[str, ...]
+    field_size: int
+    reviewed_horse_numbers: tuple[str, ...]
+    running_styles: tuple[tuple[str, str], ...]
+    pace_scenario: str
+    evidence_notes: tuple[str, ...] = ()
+    source_document_sha256: tuple[str, ...] = ()
+    method: str = EXTRACTION_METHOD
+    schema_version: int = 3
+    win_odds: Mapping[str, float] = field(default_factory=dict)
+    wide_odds: Mapping[str, float] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if not self.race_id.strip():
+            raise ValueError("race_id is required")
+        if len(self.horses) != EXTRACTION_COUNT or len(set(self.horses)) != EXTRACTION_COUNT:
+            raise ValueError(f"horses must contain exactly {EXTRACTION_COUNT} unique picks")
+        if self.method != EXTRACTION_METHOD:
+            raise ValueError(f"method must remain {EXTRACTION_METHOD!r}")
+        if self.field_size < EXTRACTION_COUNT:
+            raise ValueError("field_size must be at least the extraction count")
+        if len(set(self.reviewed_horse_numbers)) != len(self.reviewed_horse_numbers):
+            raise ValueError("reviewed_horse_numbers must not contain duplicates")
+        if len(self.reviewed_horse_numbers) != self.field_size:
+            raise ValueError(
+                "every starter must be reviewed before selection: "
+                f"reviewed {len(self.reviewed_horse_numbers)} of {self.field_size}"
+            )
+        if not set(self.horses) <= set(self.reviewed_horse_numbers):
+            raise ValueError("selected horses must be among the reviewed starters")
+        style_horses = [horse for horse, _ in self.running_styles]
+        if len(set(style_horses)) != len(style_horses):
+            raise ValueError("running_styles must not contain duplicate horse numbers")
+        if set(style_horses) != set(self.reviewed_horse_numbers):
+            raise ValueError(
+                "running_styles must record every reviewed starter's running style "
+                "regardless of popularity, before selection: "
+                f"styled {len(set(style_horses))} of {len(self.reviewed_horse_numbers)}"
+            )
+        if any(not style.strip() for _, style in self.running_styles):
+            raise ValueError("running_styles values must not be empty")
+        if not self.pace_scenario.strip():
+            raise ValueError("pace_scenario is required")
+        if self.win_odds:
+            if set(self.win_odds) != set(self.reviewed_horse_numbers):
+                raise ValueError(
+                    "win_odds, once recorded, must cover every reviewed starter "
+                    "(no partial odds board): "
+                    f"recorded {len(set(self.win_odds))} of {len(self.reviewed_horse_numbers)}"
+                )
+            if any(odds <= 1.0 for odds in self.win_odds.values()):
+                raise ValueError("decimal win odds in win_odds must be greater than 1")
+        if self.wide_odds:
+            expected_pairs = {
+                wide_pair_key(a, b) for a, b in combinations(self.horses, 2)
+            }
+            missing_pairs = expected_pairs - set(self.wide_odds)
+            if missing_pairs:
+                raise ValueError(
+                    "wide_odds, once recorded, must include at least the 6 pairs "
+                    f"among the selected four horses: missing {sorted(missing_pairs)}"
+                )
+            if any(odds <= 1.0 for odds in self.wide_odds.values()):
+                raise ValueError("decimal wide odds in wide_odds must be greater than 1")
+        start = datetime.fromisoformat(self.scheduled_start)
+        frozen = datetime.fromisoformat(self.frozen_at)
+        if start.tzinfo is None or frozen.tzinfo is None:
+            raise ValueError("scheduled_start and frozen_at must be timezone-aware")
+        if frozen >= start:
+            raise ValueError("prediction must be frozen before scheduled start")
+
+
+@dataclass(frozen=True)
+class WideOddsSnapshot:
+    """既存のPRE_RACE予想に対し、発走前に確認したワイドオッズを追記する別記録。
+
+    ``four_horse_extraction.json``自体は書き込み専用(``open("x")``)で、
+    一度凍結した選出4頭・根拠を書き換えることはできない。一方で単勝
+    オッズと違い、ワイドオッズは出馬表の段階では確定しておらず、発走
+    直前まで変動し続ける（締切直前に確認する運用が自然）。この記録は
+    選出4頭・根拠そのものを一切変更せず、発走前に確認したワイド
+    オッズだけを別ファイルとして追記するためのもの。「結果を見てから
+    書き換える」後付けとは異なり、発走前であることを``freeze_wide_odds_snapshot``
+    が検証する。
+
+    ``wide_odds``は選出4頭から作れる6通りを最低限含んでいればよく、
+    それ以上の組み合わせ(共有いただいた全通りのオッズボード全体)を
+    含めても構わない(2026-10-12、超過分を許容するよう変更)。実際の
+    的中3通りが選出4頭の外側の馬同士の組み合わせになるケースがあり
+    (例: 2026-10-12京都11R、的中は1-4-9で予想4頭のうち9しか含まない)、
+    6点だけの記録では的中組み合わせのオッズを事後に振り返られない
+    ことが分かったため、全通りを添付いただいた場合はそのまま保存できる
+    ようにした。
+    """
+
+    race_id: str
+    horses: tuple[str, ...]
+    captured_at: str
+    wide_odds: Mapping[str, float]
+    schema_version: int = 1
+
+    def __post_init__(self) -> None:
+        if not self.race_id.strip():
+            raise ValueError("race_id is required")
+        if len(self.horses) != EXTRACTION_COUNT or len(set(self.horses)) != EXTRACTION_COUNT:
+            raise ValueError(f"horses must contain exactly {EXTRACTION_COUNT} unique picks")
+        expected_pairs = {wide_pair_key(a, b) for a, b in combinations(self.horses, 2)}
+        missing_pairs = expected_pairs - set(self.wide_odds)
+        if missing_pairs:
+            raise ValueError(
+                "wide_odds must include at least the 6 pairs among the selected "
+                f"four horses: missing {sorted(missing_pairs)}"
+            )
+        if any(odds <= 1.0 for odds in self.wide_odds.values()):
+            raise ValueError("decimal wide odds must be greater than 1")
+        captured = datetime.fromisoformat(self.captured_at)
+        if captured.tzinfo is None:
+            raise ValueError("captured_at must be timezone-aware")
+
+
+@dataclass(frozen=True)
+class ExtractionResult:
+    race_id: str
+    finishing_order: tuple[str, ...]
+    settled_at: str
+    payouts: Mapping[str, float] | None = None
+    stake_yen: int | None = None
+    return_yen: int | None = None
+    schema_version: int = 1
+
+    def __post_init__(self) -> None:
+        if not self.race_id.strip():
+            raise ValueError("race_id is required")
+        if len(self.finishing_order) < 3:
+            raise ValueError("finishing_order requires at least top3")
+        settled = datetime.fromisoformat(self.settled_at)
+        if settled.tzinfo is None:
+            raise ValueError("settled_at must be timezone-aware")
+        if self.stake_yen is not None and self.stake_yen < 0:
+            raise ValueError("stake_yen cannot be negative")
+        if self.return_yen is not None and self.return_yen < 0:
+            raise ValueError("return_yen cannot be negative")
+
+
+@dataclass(frozen=True)
+class ExtractionEvaluation:
+    race_id: str
+    winner_captured: bool
+    top3_hits: int
+    exact_top3_set_hit: bool
+    umaren_hit: bool
+    wide_hit: bool
+    sanrenpuku_hit: bool
+    sanrentan_hit: bool
+    near_miss_horses: tuple[str, ...]
+    failure_categories: tuple[str, ...]
+    recovery_rate: float | None
+
+
+def evaluate_four_horse_extraction(
+    prediction: FourHorseExtraction,
+    result: ExtractionResult,
+) -> ExtractionEvaluation:
+    """馬券種別ごとに機械的判定する。
+
+    「1着4着」「3着4着」のような僅差の取りこぼしを、感覚ではなく
+    馬連・ワイド・三連複・三連単それぞれの的中有無として記録する。
+    """
+    if prediction.race_id != result.race_id:
+        raise ValueError("prediction/result race_id mismatch")
+
+    # prediction.horsesは型ヒント上はtupleだが、JSONへ一度書き出して
+    # 辞書展開(**body)で再構築した場合はlistのまま保持される。
+    # sanrentan_hitは順序まで見る直接比較のため、ここでtuple化して
+    # おかないと、実際には三連単的中しているのにlist!=tupleで
+    # 不的中と誤判定される(2026-10-11発覚)。
+    predicted_top2 = tuple(prediction.horses[:2])
+    predicted_top3 = tuple(prediction.horses[:3])
+    predicted_set = set(prediction.horses)
+    actual_top3 = tuple(result.finishing_order[:3])
+    actual_top2 = set(result.finishing_order[:2])
+    actual_set = set(actual_top3)
+
+    top3_hits = len(set(predicted_top3) & actual_set)
+    exact_top3_set_hit = set(predicted_top3) == actual_set
+    umaren_hit = set(predicted_top2) == actual_top2
+    wide_hit = len(set(predicted_top2) & actual_set) == 2
+    sanrentan_hit = predicted_top3 == actual_top3
+
+    failures: list[str] = []
+    missing = [horse for horse in actual_top3 if horse not in predicted_set]
+    if missing:
+        failures.append("抽出漏れ")
+
+    # 僅差の取りこぼし: 予想した4頭のうち券外に外れた馬が、実際には4着
+    # （ユーザー報告の「1着4着」「3着4着」パターン）だった場合。3着以内は
+    # 捕まえていても券種によっては不的中になるため、通常の的中判定とは
+    # 別に「あと一頭分」の精度課題として記録する。
+    near_miss = tuple(
+        horse
+        for horse in prediction.horses
+        if horse not in actual_set
+        and horse in result.finishing_order
+        and result.finishing_order.index(horse) == 3
+    )
+    if near_miss:
+        failures.append("着順僅差の取りこぼし")
+
+    if not exact_top3_set_hit and not missing:
+        failures.append("順位配分誤差")
+    if any(horse not in actual_set for horse in predicted_top3):
+        failures.append("過大評価")
+    if prediction.horses[3] in actual_set:
+        failures.append("最終除外候補が的中圏")
+
+    recovery = None
+    if result.stake_yen is not None and result.return_yen is not None:
+        recovery = (
+            float(result.return_yen) / float(result.stake_yen)
+            if result.stake_yen > 0
+            else None
+        )
+
+    return ExtractionEvaluation(
+        race_id=prediction.race_id,
+        winner_captured=result.finishing_order[0] in predicted_set,
+        top3_hits=top3_hits,
+        exact_top3_set_hit=exact_top3_set_hit,
+        umaren_hit=umaren_hit,
+        wide_hit=wide_hit,
+        sanrenpuku_hit=exact_top3_set_hit,
+        sanrentan_hit=sanrentan_hit,
+        near_miss_horses=near_miss,
+        failure_categories=tuple(dict.fromkeys(failures)),
+        recovery_rate=recovery,
+    )
+
+
+def _write_once(path: Path, payload: Mapping[str, Any]) -> Path:
+    if path.exists():
+        raise FileExistsError(f"immutable four-horse-extraction record already exists: {path}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    body = dict(payload)
+    body["checksum_sha256"] = sha256(_canonical(body)).hexdigest()
+    with path.open("x", encoding="utf-8") as handle:
+        json.dump(body, handle, ensure_ascii=False, sort_keys=True, indent=2)
+        handle.write("\n")
+    return path
+
+
+def freeze_four_horse_extraction(
+    root: str | Path,
+    prediction: FourHorseExtraction,
+) -> Path:
+    return _write_once(
+        Path(root) / prediction.race_id / "PRE_RACE" / "four_horse_extraction.json",
+        asdict(prediction),
+    )
+
+
+def freeze_wide_odds_snapshot(
+    root: str | Path,
+    snapshot: WideOddsSnapshot,
+) -> Path:
+    """既存のPRE_RACE予想に、発走前に確認したワイドオッズを追記専用で保存する。
+
+    対象レースのPRE_RACEがすでに凍結されていること、選出4頭が完全に
+    一致すること、発走予定時刻より前に確認したものであることを検証
+    してから書き込む。``four_horse_extraction.json``自体は一切変更しない。
+
+    1レースにつき複数回(早い時点・締切直前など)呼び出すことができる。
+    各回は``wide_odds_snapshot.json``・``wide_odds_snapshot_2.json``...と
+    連番で書き込み専用保存され、過去の回を上書きすることはない。これにより
+    2時点のオッズを`wide_odds_movement_alert.py`で比較し、大口投資による
+    締切直前の急変動を検出できる。
+    """
+    pre_race_path = Path(root) / snapshot.race_id / "PRE_RACE" / "four_horse_extraction.json"
+    if not pre_race_path.exists():
+        raise FileNotFoundError(
+            f"no frozen PRE_RACE prediction found for {snapshot.race_id}: {pre_race_path}"
+        )
+    existing = json.loads(pre_race_path.read_text(encoding="utf-8"))
+    if tuple(existing["horses"]) != snapshot.horses:
+        raise ValueError(
+            "wide_odds_snapshot horses must match the frozen PRE_RACE selection: "
+            f"frozen={existing['horses']}, snapshot={snapshot.horses}"
+        )
+    scheduled_start = datetime.fromisoformat(existing["scheduled_start"])
+    captured = datetime.fromisoformat(snapshot.captured_at)
+    if captured >= scheduled_start:
+        raise ValueError("wide odds snapshot must be captured before scheduled start")
+    pre_race_dir = Path(root) / snapshot.race_id / "PRE_RACE"
+    existing_snapshots = sorted(pre_race_dir.glob("wide_odds_snapshot*.json"))
+    sequence = len(existing_snapshots) + 1
+    filename = "wide_odds_snapshot.json" if sequence == 1 else f"wide_odds_snapshot_{sequence}.json"
+    return _write_once(pre_race_dir / filename, asdict(snapshot))
+
+
+def winning_wide_combo_odds(
+    finishing_order: Sequence[str], wide_odds: Mapping[str, float]
+) -> dict[str, float]:
+    """確定着順の上位3頭から実際に的中したワイド3通りを求め、記録済みの
+    `wide_odds`(`WideOddsSnapshot.wide_odds`等)の中に値があればそれを
+    返す(的中パターンの事後学習用)。
+
+    的中した組み合わせが選出4頭の外側の馬同士になるケースがあるため
+    (例: 2026-10-12京都11Rの的中1-4-9は予想4頭のうち9しか含まない)、
+    全通りを記録していないと一部の組み合わせがこの関数の戻り値に
+    含まれないことがある。結果を見てからこの関数で予想や記録済み
+    オッズそのものを書き換えることはなく、あくまで事後の参考値を
+    取り出すだけの読み取り専用のヘルパーである。
+    """
+    top3 = tuple(finishing_order[:3])
+    if len(top3) < 3:
+        raise ValueError("finishing_order requires at least top3")
+    result: dict[str, float] = {}
+    for horse_a, horse_b in combinations(top3, 2):
+        key = wide_pair_key(horse_a, horse_b)
+        if key in wide_odds:
+            result[key] = wide_odds[key]
+    return result
+
+
+def settle_four_horse_extraction(
+    root: str | Path,
+    prediction: FourHorseExtraction,
+    result: ExtractionResult,
+) -> tuple[Path, Path]:
+    """RESULTとEVALUATIONを追記専用で保存する。凍結済みの予想は書き換えない。"""
+    if prediction.race_id != result.race_id:
+        raise ValueError("prediction/result race_id mismatch")
+    base = Path(root) / result.race_id
+    result_path = _write_once(base / "RESULT" / "four_horse_result.json", asdict(result))
+    evaluation = evaluate_four_horse_extraction(prediction, result)
+    evaluation_path = _write_once(
+        base / "EVALUATION" / "four_horse_evaluation.json",
+        asdict(evaluation),
+    )
+    return result_path, evaluation_path

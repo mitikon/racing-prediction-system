@@ -1,8 +1,8 @@
-"""競馬予想システム開発・本格先行予測λ専用のWSI（Wilder Strength Index）自己学習部品。
+"""競馬予想システム開発のWSI（Wilder Strength Index）自己学習部品。
 
 WSI is the Wilder Strength Index (the classic Relative Strength Index
-formula), never RSI (Recursive Self-Improvement, see
-recursive_self_improvement.py)."""
+formula), never RSI, which in this repository refers only to
+racing_maintenance_rsi (the maintenance-only audit package)."""
 
 from __future__ import annotations
 
